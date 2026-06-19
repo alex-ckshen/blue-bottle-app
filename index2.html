@@ -1,0 +1,2906 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>藍瓶實驗 - Research Data Workspace (v2)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ["Instrument Sans", "Inter", "sans-serif"]
+                    },
+                    colors: {
+                        "brand-sidebar": "#F0FAF6",
+                        "brand-active": "#D9F2E7",
+                        "brand-dark": "#1E293B",
+                        "brand-text": "#334155",
+                        "brand-subtle": "#64748B"
+                    }
+                }
+            }
+        };
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Instrument Sans', sans-serif !important;
+            -webkit-font-smoothing: antialiased;
+        }
+        ::-webkit-scrollbar {
+            display: none;
+        }
+        html, body {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+            height: 100%;
+        }
+        .transition-all, .view-panel, .nav-item, canvas, .chart-container {
+            transform: translateZ(0);
+            backface-visibility: hidden;
+            perspective: 1000px;
+            will-change: transform, opacity;
+        }
+    </style>
+</head>
+<body class="text-brand-text flex flex-col h-screen overflow-hidden">
+
+    <!-- Global Popups -->
+    <div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-[9999] hidden transform transition-all duration-300 translate-y-10 opacity-0 bg-slate-900 border border-slate-800 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 text-xs">
+        <i id="toast-icon" class="fa-solid fa-circle-info text-emerald-400"></i>
+        <span id="toast-message">Message stored</span>
+    </div>
+
+    <div id="confirm-modal" onclick="if (event.target === this) closeConfirmModal()" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div class="flex items-center gap-3 text-red-600 mb-3">
+                <i class="fa-solid fa-circle-exclamation text-2xl"></i>
+                <h3 class="text-lg font-normal" id="confirm-title">Are you sure?</h3>
+            </div>
+            <p class="text-brand-text text-sm mb-6" id="confirm-desc"></p>
+            <div class="flex justify-end gap-3">
+                <button onclick="closeConfirmModal()" class="bg-gray-100 hover:bg-gray-200 text-brand-dark px-4 py-2 rounded-xl text-sm transition-colors">
+                    Cancel
+                </button>
+                <button id="confirm-action-btn" class="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl text-sm transition-colors">
+                    Confirm
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="rename-modal" onclick="if (event.target === this) closeRenameModal()" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div class="flex items-center gap-3 text-brand-dark mb-4">
+                <i class="fa-solid fa-pen-to-square text-xl text-emerald-600"></i>
+                <h3 class="text-lg font-normal">Rename Session</h3>
+            </div>
+            <div class="mb-6">
+                <label for="rename-input" class="block text-xs text-brand-subtle mb-2">New session title</label>
+                <input type="text" id="rename-input" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-brand-dark text-sm">
+            </div>
+            <div class="flex justify-end gap-3">
+                <button onclick="closeRenameModal()" class="bg-gray-100 hover:bg-gray-200 text-brand-dark px-4 py-2 rounded-xl text-sm transition-colors">
+                    Cancel
+                </button>
+                <button id="rename-action-btn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-sm transition-colors">
+                    Save Changes
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Segment Dialog Modal -->
+    <div id="edit-add-dropdown" onclick="if (event.target === this) this.classList.add('hidden')" class="fixed inset-0 bg-slate-900/45 backdrop-blur-xs z-[9999] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-5 flex flex-col max-h-[80vh]">
+            <div class="flex items-center justify-between border-b border-gray-150 pb-3 mb-3 shrink-0">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-circle-plus text-emerald-600 text-sm"></i>
+                    <h3 class="text-xs font-semibold text-brand-dark uppercase tracking-wider">Select studio recording</h3>
+                </div>
+                <button onclick="document.getElementById('edit-add-dropdown').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-sm p-1 hover:bg-slate-50 rounded-lg transition-colors">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div id="edit-add-dropdown-list" class="space-y-1 overflow-y-auto pr-1 flex-1 min-h-0">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Header navigation -->
+    <header class="bg-brand-sidebar border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-3">
+            <svg class="w-8 h-8" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M21.5 35 L42.5 35 L49 48 C51 52 48 56 43 56 L21 56 C16 56 13 52 15 48 Z" fill="#10B981"/>
+                <circle cx="28" cy="45" r="2" fill="#A7F3D0" />
+                <circle cx="38" cy="48" r="1.5" fill="#A7F3D0" />
+                <path d="M26 8h12v10L52 48c2 4-1 8-6 8H18c-5 0-8-4-6-8L26 18V8z" stroke="#1E293B" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+                <path d="M24 8h16" stroke="#1E293B" stroke-width="4" stroke-linecap="round"/>
+            </svg>
+            <div>
+                <h1 class="text-lg font-normal text-brand-dark leading-none">藍瓶實驗</h1>
+                <span class="text-[10px] text-brand-subtle tracking-wider font-semibold uppercase">Research Data Console</span>
+            </div>
+        </div>
+
+        <nav class="flex items-center gap-1.5 bg-white p-1.5 rounded-xl border border-gray-150 shadow-sm">
+            <span onclick="switchTab('data')" id="nav-data" class="nav-item flex items-center gap-2 px-5 py-2.5 text-sm text-brand-dark bg-brand-active rounded-lg cursor-pointer transition-all shadow-xs font-normal">
+                <i class="fa-solid fa-database text-sm"></i>
+                <span>Data</span>
+            </span>
+            <span onclick="switchTab('edit')" id="nav-edit" class="nav-item flex items-center gap-2 px-5 py-2.5 text-sm text-brand-text rounded-lg hover:bg-brand-active cursor-pointer transition-all font-normal">
+                <i class="fa-solid fa-pen-nib text-sm"></i>
+                <span>Edit</span>
+            </span>
+            <span onclick="switchTab('multiview')" id="nav-multiview" class="nav-item flex items-center gap-2 px-5 py-2.5 text-sm text-brand-text rounded-lg hover:bg-brand-active cursor-pointer transition-all font-normal">
+                <i class="fa-solid fa-layer-group text-sm"></i>
+                <span>Multiview</span>
+            </span>
+        </nav>
+
+        <div class="flex items-center gap-2">
+            <div id="v2-db-badge" class="flex items-center">
+                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs bg-emerald-100 text-emerald-800 border border-emerald-200 font-semibold tracking-wider uppercase">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Studio Connected</span>
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main View Workspace Panel -->
+    <main id="main-content" class="flex-1 bg-white flex flex-col h-[calc(100vh-60px)] overflow-hidden">
+
+        <!-- TAB LAYER 1: DATA PIPELINE WORKSPACE -->
+        <div id="view-data" class="view-panel p-4 sm:p-6 flex-1 flex flex-col overflow-hidden h-full">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 h-full min-h-0">
+                
+                <!-- LEFT GRID: Core database listing (4 cols) -->
+                <div class="lg:col-span-4 flex flex-col h-full min-h-0 bg-white border border-gray-200 rounded-2xl p-4 shadow-xs">
+                    <div class="flex items-center justify-between pb-3 border-b border-gray-150 shrink-0">
+                        <div class="flex flex-col">
+                            <span class="text-sm font-semibold text-brand-dark">Studio Session Records</span>
+                        </div>
+                        <span id="studio-records-count" class="text-[10px] bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full font-semibold font-mono">0 sessions</span>
+                    </div>
+
+                    <!-- Search / Quick Action strip -->
+                    <div class="flex gap-1.5 py-3 shrink-0 items-center">
+                        <div class="relative flex-1 min-w-0">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-brand-subtle"></i>
+                            <input type="text" id="studio-search-input" oninput="renderStudioRecords()" placeholder="Search..." class="w-full text-xs pl-8 pr-2 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-brand-dark">
+                        </div>
+                        <!-- Sort select -->
+                        <div class="relative shrink-0">
+                            <select id="studio-sort-select" onchange="renderStudioRecords()" class="text-xs bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-brand-dark cursor-pointer font-medium appearance-none pr-7">
+                                <option value="name-asc" selected>Name (A-Z)</option>
+                                <option value="name-desc">Name (Z-A)</option>
+                                <option value="time-desc">Newest</option>
+                                <option value="time-asc">Oldest</option>
+                            </select>
+                            <i class="fa-solid fa-chevron-down absolute right-2.5 top-3 text-[9px] text-brand-subtle pointer-events-none"></i>
+                        </div>
+                        <!-- Trash multiple -->
+                        <button id="studio-multiple-delete" onclick="deleteCheckedStudioSessions()" disabled class="text-xs bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 px-3 py-2 rounded-xl transition-colors shrink-0 flex items-center justify-center gap-1 opacity-50 cursor-not-allowed h-[34px]">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
+
+                    <!-- Scrollable records container -->
+                    <div class="flex-1 overflow-y-auto space-y-2 pr-1 min-h-0" id="studio-records-container">
+                        <!-- Loaded dynamically -->
+                        <div class="text-center text-brand-subtle py-12 text-xs">
+                            <i class="fa-solid fa-spinner fa-spin text-lg mb-2 text-emerald-500"></i>
+                            <p>Loading database records...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RIGHT GRID: Data Acquisition, Import Panel & Active Session Viewer (8 cols) -->
+                <div class="lg:col-span-8 flex flex-col h-full min-h-0 gap-5">
+                    
+                    <!-- Top section: Select and pull from Firebase database / Excel Upload Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 shrink-0">
+                        
+                        <!-- Pull from Original Firebase DB Card -->
+                        <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-xs flex flex-col justify-between">
+                            <div>
+                                <div class="flex items-center gap-2 mb-3">
+                                    <div class="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                                        <i class="fa-solid fa-cloud-arrow-down text-xs"></i>
+                                    </div>
+                                    <h3 class="text-xs font-semibold text-brand-dark">Original Firebase Database</h3>
+                                </div>
+                            </div>
+                            <button onclick="openOriginalDbDrawer()" class="w-full py-2 px-3 border border-emerald-200 text-emerald-700 bg-emerald-50/50 hover:bg-emerald-50 hover:border-emerald-300 transition-colors rounded-xl text-xs flex items-center justify-center gap-1.5 font-semibold">
+                                <i class="fa-solid fa-share-from-square"></i>
+                                <span>Browse & Pull Records</span>
+                            </button>
+                        </div>
+
+                        <!-- Drag and Drop Excel Uploader Card -->
+                        <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-xs flex flex-col justify-between">
+                            <div>
+                                <div class="flex items-center gap-2 mb-3">
+                                    <div class="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                                        <i class="fa-solid fa-file-excel text-xs"></i>
+                                    </div>
+                                    <h3 class="text-xs font-semibold text-brand-dark">Excel File Upload</h3>
+                                </div>
+                            </div>
+                            
+                            <!-- Custom hidden input file and trigger button -->
+                            <div class="relative">
+                                <input type="file" id="excel-file-uploader" accept=".xlsx" multiple onchange="handleExcelFileUpload(event)" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10" />
+                                <button class="w-full py-2 px-3 border border-blue-200 text-blue-700 bg-blue-50/50 hover:bg-blue-50 hover:border-blue-300 transition-colors rounded-xl text-xs flex items-center justify-center gap-1.5 font-semibold pointer-events-none">
+                                    <i class="fa-solid fa-file-import"></i>
+                                    <span>Upload Excel File(s)</span>
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Bottom panel: Selected Session Data Viewer (Chart and details) -->
+                    <div class="flex-1 bg-white border border-gray-200 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col overflow-hidden">
+                        
+                        <!-- Empty Active State -->
+                        <div id="data-viewer-empty" class="flex-1 flex flex-col items-center justify-center text-center p-6 bg-slate-50/50 rounded-xl border border-dashed border-gray-150">
+                            <div class="w-12 h-12 bg-gray-100 text-brand-subtle rounded-full flex items-center justify-center mb-2.5">
+                                <i class="fa-solid fa-chart-line text-lg"></i>
+                            </div>
+                            <h4 class="text-xs font-semibold text-brand-dark">No Active Session Loaded</h4>
+                        </div>
+
+                        <!-- Active Viewer -->
+                        <div id="data-viewer-active" class="hidden flex-1 flex flex-col min-h-0">
+                            <div class="flex items-center justify-between border-b border-gray-150 pb-3 shrink-0">
+                                <div class="flex items-center gap-2">
+                                    <button class="lg:hidden p-1.5 text-brand-dark bg-gray-50 rounded-lg hover:bg-gray-100 mr-1" onclick="clearSelectedViewer()" title="Return to menu">
+                                        <i class="fa-solid fa-arrow-left"></i>
+                                    </button>
+                                    <div>
+                                        <h3 class="text-sm font-semibold text-brand-dark cursor-pointer hover:text-emerald-600 transition-colors" id="viewer-session-title" onclick="renameSelectedSession()" title="Rename Session">Loaded Session</h3>
+                                        <span class="text-[10px] text-brand-subtle uppercase tracking-wider font-semibold" id="viewer-session-date">-</span>
+                                    </div>
+                                </div>
+                                <div class="flex gap-1.5">
+                                    <button onclick="downloadActiveSessionExcel()" class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl font-medium transition-colors flex items-center gap-1">
+                                        <i class="fa-solid fa-file-excel"></i>
+                                        <span>Download</span>
+                                    </button>
+                                    <button onclick="deleteActiveSession()" class="text-xs bg-rose-50 border border-rose-100 text-rose-600 hover:bg-rose-100 p-2 rounded-xl transition-colors">
+                                        <i class="fa-solid fa-trash-can"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Interactive Chart Canvas -->
+                            <div class="flex-1 relative min-h-0 w-full py-4">
+                                <div id="chart-loading-overlay" class="absolute inset-0 bg-white/70 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2 z-20 hidden">
+                                    <i class="fa-solid fa-spinner fa-spin text-xl text-emerald-500"></i>
+                                    <span class="text-xs text-brand-dark font-medium">Refreshing telemetry charts...</span>
+                                </div>
+                                <canvas id="active-session-chart" class="w-full h-full"></canvas>
+                            </div>
+
+                            <!-- Key Metrics Grid -->
+                            <div class="grid grid-cols-3 gap-3 bg-slate-50 border border-slate-150 p-3 rounded-xl shrink-0">
+                                <div>
+                                    <span class="block text-[9px] text-brand-subtle uppercase tracking-wider mb-0.5 select-none font-semibold">Duration</span>
+                                    <span id="viewer-session-duration" class="text-xs text-brand-dark font-mono font-medium">-</span>
+                                </div>
+                                <div>
+                                    <span class="block text-[9px] text-brand-subtle uppercase tracking-wider mb-0.5 select-none font-semibold">Average Luma</span>
+                                    <span id="viewer-session-avg" class="text-xs text-emerald-600 font-mono font-semibold">-</span>
+                                </div>
+                                <div>
+                                    <span class="block text-[9px] text-brand-subtle uppercase tracking-wider mb-0.5 select-none font-semibold font-semibold">Peak Value</span>
+                                    <span id="viewer-session-max" class="text-xs text-emerald-800 font-mono font-semibold">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- TAB LAYER 2: EDIT PIPELINE WORKSPACE (STITCH, CUT & MERGE) -->
+        <div id="view-edit" class="view-panel hidden p-4 sm:p-6 flex-1 flex flex-col lg:flex-row gap-5 h-full overflow-hidden bg-slate-50">
+            
+            <!-- LEFT PANEL: Configuration panel -->
+            <div class="w-full lg:w-72 bg-white flex flex-col border border-gray-200 rounded-2xl p-4 shadow-sm h-full overflow-y-auto shrink-0 space-y-4">
+                <div class="border-b border-gray-150 pb-3">
+                    <h2 class="text-sm font-semibold text-brand-dark flex items-center gap-2">
+                        <i class="fa-solid fa-scissors text-emerald-600"></i>
+                        <span>Workflow: Crop & Stitch</span>
+                    </h2>
+                </div>
+
+                <!-- Combined Session Details -->
+                <div class="space-y-3">
+                    <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider font-semibold">Merged Session Info</h3>
+                    <div>
+                        <label class="block text-[10px] text-brand-subtle mb-1">Custom Title</label>
+                        <input type="text" id="edit-session-title" value="Merged Test Session" placeholder="Type custom name..." class="w-full px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-brand-dark text-xs">
+                    </div>
+                </div>
+
+                <!-- Selected Segment Inspector & Config -->
+                <div class="border-t border-gray-150 pt-3 space-y-3">
+                    <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider font-semibold">Selected Segment Settings</h3>
+                    
+                    <div id="edit-segment-empty" class="text-center py-6 px-3 bg-slate-50/50 rounded-xl border border-dashed border-gray-150 text-brand-subtle text-[11px]">
+                        <i class="fa-solid fa-arrow-pointer text-lg mb-1.5 opacity-50 block"></i>
+                        Select a segment from the bottom track
+                    </div>
+
+                    <!-- Display fields when a segment is selected -->
+                    <div id="edit-segment-active" class="hidden space-y-4 p-3.5 bg-emerald-50/30 border border-emerald-100 rounded-xl">
+                        <div class="flex items-center justify-between pb-1.5 border-b border-emerald-100">
+                            <span class="text-xs font-semibold text-brand-dark truncate pr-2" id="edit-active-segment-title">Segment Title</span>
+                            <button onclick="removeSelectedEditSegment()" class="text-rose-500 hover:text-rose-700 bg-white p-1 rounded-md border border-slate-100 hover:shadow-xs transition-all text-[10px]">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+
+                        <!-- START TIME CONFIG (popup bar as specified: "AM/PM:HOURS:MINUITE:SECONDS") -->
+                        <div class="space-y-1.5">
+                            <label class="block text-[10px] uppercase font-semibold text-brand-subtle tracking-wider">Select Start Time (AM/PM:H:M:S)</label>
+                            <div class="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1.5 shadow-6xs">
+                                <select id="edit-segment-ampm" onchange="applyActiveSegmentInputs()" class="px-1.5 py-1 bg-slate-50 border border-gray-200 rounded text-xs text-brand-dark font-medium outline-none">
+                                    <option value="AM">AM</option>
+                                    <option value="PM">PM</option>
+                                </select>
+                                <span class="text-xs text-gray-400 font-bold">:</span>
+                                <input type="number" id="edit-segment-h" oninput="applyActiveSegmentInputs()" placeholder="HH" class="w-10 px-1 py-1 text-center bg-slate-50 border border-gray-200 rounded text-xs font-mono text-brand-dark" min="1" max="12">
+                                <span class="text-xs text-gray-400 font-bold">:</span>
+                                <input type="number" id="edit-segment-m" oninput="applyActiveSegmentInputs()" placeholder="MM" class="w-10 px-1 py-1 text-center bg-slate-50 border border-gray-200 rounded text-xs font-mono text-brand-dark" min="0" max="59">
+                                <span class="text-xs text-gray-400 font-bold">:</span>
+                                <input type="number" id="edit-segment-s" oninput="applyActiveSegmentInputs()" placeholder="SS" class="w-10 px-1 py-1 text-center bg-slate-50 border border-gray-200 rounded text-xs font-mono text-brand-dark" min="0" max="59">
+                            </div>
+                        </div>
+
+                        <!-- TRIM CONTROLS -->
+                        <div class="space-y-2.5 pt-2 border-t border-emerald-100">
+                            <label class="block text-[10px] uppercase font-semibold text-brand-subtle tracking-wider flex items-center gap-1">
+                                <i class="fa-solid fa-crop"></i>
+                                <span>Trim Segment Boundaries</span>
+                            </label>
+                            
+                            <div class="space-y-1">
+                                <div class="flex justify-between text-[10px] text-brand-subtle font-mono">
+                                    <span>Cut from Start:</span>
+                                    <span id="edit-trim-start-lbl" class="font-bold text-brand-dark">0.0s</span>
+                                </div>
+                                <input type="range" id="edit-segment-trim-start" oninput="applyActiveSegmentTrim()" min="0" max="100" step="0.5" class="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-emerald-600">
+                            </div>
+
+                            <div class="space-y-1">
+                                <div class="flex justify-between text-[10px] text-brand-subtle font-mono">
+                                    <span>Cut from End:</span>
+                                    <span id="edit-trim-end-lbl" class="font-bold text-brand-dark">0.0s</span>
+                                </div>
+                                <input type="range" id="edit-segment-trim-end" oninput="applyActiveSegmentTrim()" min="0" max="100" step="0.5" class="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-emerald-600">
+                            </div>
+                            
+                            <div class="text-[9px] bg-emerald-100/40 border border-emerald-100/60 p-1.5 rounded-lg text-emerald-800 leading-snug">
+                                <span class="font-bold">Info:</span> Datapoints outside these ranges will be discarded during stitch compilation.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Global Trim Options -->
+                <div class="border-t border-gray-150 pt-3 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider font-semibold">Global Timeline Trim</h3>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="edit-global-trim-check" onchange="toggleGlobalTrimCheck()" class="sr-only peer">
+                            <div class="w-7 h-4 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-600"></div>
+                        </label>
+                    </div>
+
+                    <div id="edit-global-trim-inputs" class="hidden space-y-2 p-3 bg-amber-50/50 border border-amber-200 rounded-xl">
+                        <p class="text-[10px] text-amber-700 leading-snug">Discard entire merged timeline points outside of this global clock window:</p>
+                        
+                        <div class="space-y-1">
+                            <label class="block text-[9px] text-amber-800 font-semibold uppercase font-sans">Start Keep Time:</label>
+                            <div class="flex items-center gap-1 bg-white border border-amber-200 rounded-lg p-1">
+                                <select id="edit-global-start-ampm" onchange="applyGlobalTrimConfig()" class="px-1 py-0.5 bg-slate-50 border border-gray-250 rounded text-[10px] text-brand-dark outline-none font-medium">
+                                    <option value="AM">AM</option>
+                                    <option value="PM">PM</option>
+                                </select>
+                                <span class="text-xs text-gray-400 font-bold">:</span>
+                                <input type="number" id="edit-global-start-h" oninput="applyGlobalTrimConfig()" placeholder="HH" class="w-8 px-1 py-0.5 text-center bg-slate-50 border border-gray-200 rounded text-[10px] font-mono" min="1" max="12">
+                                <span class="text-xs text-gray-400 font-bold">:</span>
+                                <input type="number" id="edit-global-start-m" oninput="applyGlobalTrimConfig()" placeholder="MM" class="w-8 px-1 py-0.5 text-center bg-slate-50 border border-gray-200 rounded text-[10px] font-mono" min="0" max="59">
+                                <span class="text-xs text-gray-400 font-bold">:</span>
+                                <input type="number" id="edit-global-start-s" oninput="applyGlobalTrimConfig()" placeholder="SS" class="w-8 px-1 py-0.5 text-center bg-slate-50 border border-gray-200 rounded text-[10px] font-mono" min="0" max="59">
+                            </div>
+                        </div>
+
+                        <div class="space-y-1">
+                            <label class="block text-[9px] text-amber-800 font-semibold uppercase font-sans">End Keep Time:</label>
+                            <div class="flex items-center gap-1 bg-white border border-amber-200 rounded-lg p-1">
+                                <select id="edit-global-end-ampm" onchange="applyGlobalTrimConfig()" class="px-1 py-0.5 bg-slate-50 border border-gray-250 rounded text-[10px] text-brand-dark outline-none font-medium">
+                                    <option value="AM">AM</option>
+                                    <option value="PM">PM</option>
+                                </select>
+                                <span class="text-xs text-gray-400 font-bold">:</span>
+                                <input type="number" id="edit-global-end-h" oninput="applyGlobalTrimConfig()" placeholder="HH" class="w-8 px-1 py-0.5 text-center bg-slate-50 border border-gray-200 rounded text-[10px] font-mono" min="1" max="12">
+                                <span class="text-xs text-gray-400 font-bold">:</span>
+                                <input type="number" id="edit-global-end-m" oninput="applyGlobalTrimConfig()" placeholder="MM" class="w-8 px-1 py-0.5 text-center bg-slate-50 border border-gray-200 rounded text-[10px] font-mono" min="0" max="59">
+                                <span class="text-xs text-gray-400 font-bold">:</span>
+                                <input type="number" id="edit-global-end-s" oninput="applyGlobalTrimConfig()" placeholder="SS" class="w-8 px-1 py-0.5 text-center bg-slate-50 border border-gray-200 rounded text-[10px] font-mono" min="0" max="59">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CENTER/RIGHT PANEL: Main Chart Card and bottom draggable segments track (2/3 width) -->
+            <div class="flex-1 flex flex-col bg-white border border-gray-200 rounded-2xl p-4 shadow-sm h-full overflow-hidden">
+                
+                <!-- Controls top row -->
+                <div class="flex items-center justify-between pb-3 border-b border-gray-150 shrink-0">
+                    <div class="flex flex-col">
+                        <span class="text-xs font-semibold text-brand-dark">Stitch Preview Board</span>
+                    </div>
+                    
+                    <div class="flex items-center gap-2">
+                        <!-- Export Unified Excel -->
+                        <button onclick="exportEditSessionExcel()" class="text-xs font-normal text-brand-dark bg-white border border-gray-200 hover:bg-gray-50 px-3 py-2 rounded-xl flex items-center gap-1.5 transition-all shadow-6xs cursor-pointer">
+                            <i class="fa-solid fa-file-excel text-emerald-600 text-sm"></i>
+                            <span>Export to Excel</span>
+                        </button>
+                        <!-- Save to Studio DB -->
+                        <button onclick="saveEditSessionToDb()" class="text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer">
+                            <i class="fa-solid fa-floppy-disk text-sm"></i>
+                            <span>Save to Database</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Main Chart Canvas Area -->
+                <div class="flex-1 relative mt-4 min-h-0 min-w-0 flex items-center justify-center">
+                    <!-- Empty State Overlay -->
+                    <div id="edit-chart-empty-state" class="absolute inset-0 flex flex-col items-center justify-center bg-white z-10 p-6 text-center">
+                        <div class="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mb-3">
+                            <i class="fa-solid fa-pen-nib text-2xl animate-bounce"></i>
+                        </div>
+                        <h3 class="text-sm font-semibold text-brand-dark mb-4">Stitch Workspace is Empty</h3>
+                        <button onclick="openSelectEditSegmentDropdown(event)" class="text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-150 hover:bg-emerald-100 px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
+                            <i class="fa-solid fa-plus"></i>
+                            <span>Add First Segment</span>
+                        </button>
+                    </div>
+                    <canvas id="edit-chart" class="w-full h-full"></canvas>
+                </div>
+
+                <!-- Timeline Mixing Track Area (at the bottom) -->
+                <div class="h-32 border-t border-gray-150 pt-3 mt-4 shrink-0 flex flex-col overflow-hidden">
+                    <div class="flex items-center justify-between mb-2 shrink-0">
+                        <span class="text-[10px] uppercase tracking-wider font-semibold text-brand-subtle flex items-center gap-1.5 select-none">
+                            <i class="fa-solid fa-timeline text-emerald-600"></i>
+                            <span>Stitching Timeline Track (Drag to Reorder)</span>
+                        </span>
+                    </div>
+
+                    <!-- Horizontal scrollable timeline track container + Giant Plus button -->
+                    <div class="flex-1 flex gap-3 min-w-0 h-full overflow-hidden">
+                        <div id="edit-timeline-track" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl flex items-center p-3 gap-3 overflow-x-auto min-w-0">
+                            <!-- Populated dynamically -->
+                        </div>
+
+                        <!-- GIANT PLUS BUTTON (directly at bottom track, no other wording) -->
+                        <button id="add-edit-segment-btn" onclick="openSelectEditSegmentDropdown(event)" class="w-20 h-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs flex items-center justify-center shrink-0 transition-all hover:scale-[1.03] active:scale-95 group cursor-pointer" title="Add Segment">
+                            <i class="fa-solid fa-plus text-3xl group-hover:scale-110 transition-transform"></i>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- TAB LAYER 3: MULTIVIEW TELEMETRY ALIGNMENT CHART -->
+        <div id="view-multiview" class="view-panel hidden p-4 sm:p-6 flex-1 flex flex-row overflow-hidden gap-4 h-full bg-slate-50">
+            
+            <!-- LEFT PANEL: Filterable Datasets listing -->
+            <div class="w-72 bg-white flex flex-col border border-gray-200 rounded-2xl p-4 shadow-sm h-full overflow-hidden shrink-0">
+                <div class="flex items-center justify-between mb-3 shrink-0">
+                    <h2 class="text-sm font-semibold text-brand-dark flex items-center gap-2">
+                        <i class="fa-solid fa-list-check text-emerald-600"></i>
+                        <span>Studio Recordings</span>
+                    </h2>
+                    <span id="multiview-db-count" class="text-[10px] bg-slate-100 px-2 py-0.5 rounded-full font-mono text-brand-subtle">0 records</span>
+                </div>
+                
+                <!-- Search / Sort strip -->
+                <div class="flex gap-1.5 mb-3 shrink-0 items-center">
+                    <div class="relative flex-1 min-w-0">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-brand-subtle"></i>
+                        <input type="text" id="multiview-search-input" oninput="renderMultiviewSidebar()" placeholder="Search..." class="w-full text-xs pl-8 pr-2 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-brand-dark">
+                    </div>
+                    <!-- Sort select -->
+                    <div class="relative shrink-0">
+                        <select id="multiview-sort-select" onchange="renderMultiviewSidebar()" class="text-xs bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-brand-dark cursor-pointer font-medium appearance-none pr-7">
+                            <option value="name-asc" selected>Name (A-Z)</option>
+                            <option value="name-desc">Name (Z-A)</option>
+                            <option value="time-desc">Newest</option>
+                            <option value="time-asc">Oldest</option>
+                        </select>
+                        <i class="fa-solid fa-chevron-down absolute right-2.5 top-3 text-[9px] text-brand-subtle pointer-events-none"></i>
+                    </div>
+                </div>
+
+                <!-- Scrollable list of available recordings -->
+                <div class="flex-1 overflow-y-auto pr-1 space-y-2" id="multiview-available-list">
+                    <!-- Dynamic available session cards -->
+                </div>
+            </div>
+
+            <!-- CENTER PANEL: Single Large Multi-Dataset Chart -->
+            <div class="flex-1 bg-white flex flex-col border border-gray-200 rounded-2xl p-4 shadow-sm h-full overflow-hidden">
+                
+                <!-- Controls top row -->
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-100 shrink-0">
+                    <div class="flex flex-col">
+                        <span class="text-xs font-semibold text-brand-dark">Multiview Data Visualizer</span>
+                    </div>
+                    
+                    <div class="flex items-center gap-2">
+                        <!-- Custom filename input -->
+                        <input type="text" id="multiview-filename-input" placeholder="Custom filename (optional)..." class="text-xs px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-brand-dark w-44" />
+                        <!-- Export Excel -->
+                        <button onclick="exportMultiviewExcel()" class="text-xs font-normal text-brand-dark bg-white border border-gray-200 hover:bg-gray-50 px-3 py-2 rounded-xl flex items-center gap-1.5 transition-colors shadow-xs">
+                            <i class="fa-solid fa-file-excel text-emerald-600 text-sm"></i>
+                            <span>Export Excel</span>
+                        </button>
+                        <!-- Download as JPG -->
+                        <button onclick="downloadMultiviewJpg()" class="text-xs font-normal text-brand-dark bg-white border border-gray-200 hover:bg-gray-50 px-3 py-2 rounded-xl flex items-center gap-1.5 transition-colors shadow-xs">
+                            <i class="fa-solid fa-file-image text-blue-600 text-sm"></i>
+                            <span>Download JPG</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Canvas Container -->
+                <div class="flex-1 relative mt-4 min-h-0 min-w-0 flex items-center justify-center">
+                    <!-- Empty State Overlay -->
+                    <div id="multiview-empty-state" class="absolute inset-0 flex flex-col items-center justify-center bg-white z-10 p-6 text-center">
+                        <div class="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mb-3">
+                            <i class="fa-solid fa-layer-group text-2xl"></i>
+                        </div>
+                        <h3 class="text-sm font-semibold text-brand-dark">No recordings plotted</h3>
+                    </div>
+                    <canvas id="multiview-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- RIGHT PANEL: Data styling -->
+            <div class="w-72 bg-white flex flex-col border border-gray-200 rounded-2xl p-4 shadow-sm h-full overflow-hidden shrink-0">
+                <div class="flex items-center justify-between mb-3 shrink-0">
+                    <h2 class="text-sm font-semibold text-brand-dark flex items-center gap-2">
+                        <i class="fa-solid fa-sliders text-blue-600"></i>
+                        <span>Data</span>
+                    </h2>
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="clearMultiviewAll()" class="text-[10px] bg-rose-50 hover:bg-rose-100 text-rose-600 px-2 py-1 rounded-md transition-all font-medium">
+                            <i class="fa-solid fa-eraser"></i> Clear
+                        </button>
+                        <span id="multiview-active-count" class="text-[10px] bg-blue-50 px-2 py-0.5 rounded-full font-mono text-blue-600">0 active</span>
+                    </div>
+                </div>
+
+                <!-- Plotted items -->
+                <div class="flex-1 overflow-y-auto pr-1 space-y-3" id="multiview-active-list">
+                    <!-- Dynamic active cards -->
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- SLIDING SLIDE-OUT PANEL: Original Firebase Database Records Browser -->
+    <div id="original-db-drawer" class="fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-white border-l border-gray-200 shadow-2xl transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col overflow-hidden">
+        
+        <!-- Header -->
+        <div class="p-4 border-b border-gray-150 flex items-center justify-between bg-emerald-900 text-white shrink-0">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-database text-lg text-emerald-400"></i>
+                <div>
+                    <h2 class="text-sm font-semibold leading-tight">Handshake: Migration Center</h2>
+                    <span class="text-[10px] text-emerald-200">Sandbox Database: blue-bottle-experiment</span>
+                </div>
+            </div>
+            <button onclick="closeOriginalDbDrawer()" class="text-emerald-100 hover:text-white p-1 rounded-lg hover:bg-emerald-800/50 transition-colors">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+        </div>
+
+        <!-- Migration toolbar -->
+        <div class="p-3 bg-slate-50 border-b border-gray-150 shrink-0 flex items-center justify-between gap-3">
+            <div class="relative flex-1">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-2 text-xs text-brand-subtle"></i>
+                <input type="text" id="original-search-input" oninput="renderOriginalRecords()" placeholder="Filter sandbox records..." class="w-full text-xs pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 outline-none">
+            </div>
+            <button id="import-checked-btn" onclick="importCheckedOriginalSessions()" disabled class="text-xs bg-emerald-650 bg-emerald-600 text-white font-semibold px-3 py-1.5 rounded-xl flex items-center gap-1 transition-colors opacity-50 cursor-not-allowed shrink-0">
+                <i class="fa-solid fa-file-import"></i>
+                <span>Import Checked (<span id="checked-original-count">0</span>)</span>
+            </button>
+        </div>
+
+        <!-- Scrollable list of sandboxed items -->
+        <div class="flex-1 overflow-y-auto p-4 space-y-2.5 bg-slate-50/50" id="original-records-container">
+            <div class="text-center text-brand-subtle py-12 text-xs">
+                <i class="fa-solid fa-spinner fa-spin text-lg mb-2 text-emerald-500"></i>
+                <p>Establishing secure sync socket...</p>
+            </div>
+        </div>
+
+
+    </div>
+    
+    <!-- Drawer backdrop mask -->
+    <div id="drawer-backdrop" onclick="closeOriginalDbDrawer()" class="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs hidden transition-opacity duration-300"></div>
+
+    <!-- SCRIPT DECK (PRIMARY CONFIGS) -->
+    <script>
+        // Primary Studio Database Configuration (Write & Read workspace)
+        const newFirebaseConfig = {
+            apiKey: "AIzaSyCf-6BcBGyLcZ4zRexLHzm0CsKNVQWRqFk",
+            authDomain: "blue-bottle-experiment-data.firebaseapp.com",
+            databaseURL: "https://blue-bottle-experiment-data-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "blue-bottle-experiment-data",
+            storageBucket: "blue-bottle-experiment-data.firebasestorage.app",
+            messagingSenderId: "708484421399",
+            appId: "1:708484421399:web:ff348d4c3ea6c431328952"
+        };
+
+        // Original database configuration (Import / Pull only)
+        const originalFirebaseConfig = {
+            apiKey: "AIzaSyDxizhrJxCB5Hmi8es__0MIecfB9mV6R8w",
+            authDomain: "blue-bottle-experiment.firebaseapp.com",
+            databaseURL: "https://blue-bottle-experiment-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "blue-bottle-experiment",
+            storageBucket: "blue-bottle-experiment.firebasestorage.app",
+            messagingSenderId: "363072938771",
+            appId: "1:363072938771:web:e6a0d7f073fbb5e91a30e6"
+        };
+
+        // Initialize multiple apps securely
+        const mainApp = firebase.initializeApp(newFirebaseConfig, "primary_node");
+        const db = mainApp.database();
+
+        const sandboxApp = firebase.initializeApp(originalFirebaseConfig, "original_node");
+        const originalDb = sandboxApp.database();
+
+        // Application State Matrices
+        let studioSessions = {};
+        let originalSessions = {};
+        
+        let checkedStudioKeys = new Set();
+        let checkedOriginalKeys = new Set();
+        
+        let selectedSessionId = null;
+        let activeChart = null;
+
+        // Multiview state variables
+        let multiviewSelectedList = [];
+        let multiviewChartInstance = null;
+
+        // Edit workspace state variables
+        let editSessions = [];
+        let editChartInstance = null;
+        let selectedEditSegmentIdx = null;
+
+        // Microsoft 365 Color palette matching index.html
+        const M365_COLORS = [
+            { name: "Excel Green", hex: "#107c41" },
+            { name: "Classic Navy", hex: "#0078d4" },
+            { name: "Office Coral", hex: "#d83b01" },
+            { name: "Sunset Orange", hex: "#ff8c00" },
+            { name: "OneNote Purple", hex: "#5c2d91" },
+            { name: "Deep Teal", hex: "#008272" },
+            { name: "Forest Gate", hex: "#004b50" },
+            { name: "Access Maroon", hex: "#a80000" },
+            { name: "PowerPoint Pink", hex: "#e3008c" },
+            { name: "Soft Lavender", hex: "#b4a0ff" },
+            { name: "Muted Sage", hex: "#4b6566" },
+            { name: "Bookings Teal", hex: "#038387" },
+            { name: "Soft Mint", hex: "#10b981" },
+            { name: "Crimson Rose", hex: "#d32f2f" },
+            { name: "Pumpkin Hue", hex: "#f57c00" },
+            { name: "Leaf Emerald", hex: "#388e3c" },
+            { name: "Azure Breeze", hex: "#0288d1" }
+        ];
+
+        function getColorName(hex) {
+            const matched = M365_COLORS.find(c => c.hex.toLowerCase() === hex.toLowerCase());
+            return matched ? matched.name : hex;
+        }
+
+        // --- TOAST NOTIFICATIONS ---
+        function showToast(message, isError = false) {
+            const toast = document.getElementById("toast");
+            const icon = document.getElementById("toast-icon");
+            const label = document.getElementById("toast-message");
+            if (!toast || !icon || !label) return;
+
+            label.innerText = message;
+            if (isError) {
+                icon.className = "fa-solid fa-circle-exclamation text-rose-500";
+            } else {
+                icon.className = "fa-solid fa-circle-check text-emerald-400";
+            }
+
+            toast.classList.remove("hidden");
+            setTimeout(() => {
+                toast.classList.remove("translate-y-10", "opacity-0");
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.add("translate-y-10", "opacity-0");
+                setTimeout(() => toast.classList.add("hidden"), 300);
+            }, 5000);
+        }
+
+        // --- TAB NAVIGATION SWITCHING ---
+        function switchTab(tabId) {
+            document.querySelectorAll(".view-panel").forEach(p => p.classList.add("hidden"));
+            document.querySelectorAll(".nav-item").forEach(n => {
+                n.className = "nav-item flex items-center gap-2 px-5 py-2.5 text-sm text-brand-text rounded-lg hover:bg-brand-active cursor-pointer transition-all font-normal";
+            });
+
+            const activePanel = document.getElementById(`view-${tabId}`);
+            if (activePanel) activePanel.classList.remove("hidden");
+
+            const activeNav = document.getElementById(`nav-${tabId}`);
+            if (activeNav) {
+                activeNav.className = "nav-item flex items-center gap-2 px-5 py-2.5 text-sm text-brand-dark bg-brand-active rounded-lg cursor-pointer transition-all shadow-xs font-semibold";
+            }
+
+            if (tabId === 'multiview') {
+                renderMultiviewSidebar();
+                renderMultiviewActiveList();
+                updateMultiviewChart();
+            } else if (tabId === 'edit') {
+                renderEditTimeline();
+                updateEditChart();
+            }
+        }
+
+        // --- DB SYNCHRONIZATION: NEW/STUDIO DATABASE ---
+        db.ref("sessions").on("value", (snap) => {
+            studioSessions = snap.val() || {};
+            
+            // Prune deleted sessions from multiviewSelectedList
+            if (typeof multiviewSelectedList !== 'undefined' && Array.isArray(multiviewSelectedList)) {
+                const oldLen = multiviewSelectedList.length;
+                multiviewSelectedList = multiviewSelectedList.filter(item => {
+                    const cleanId = item.id.toString().replace('session_', '');
+                    return !!(studioSessions[`session_${cleanId}`] || studioSessions[cleanId]);
+                });
+                if (multiviewSelectedList.length !== oldLen) {
+                    renderMultiviewActiveList();
+                    updateMultiviewChart();
+                }
+            }
+
+            // Prune deleted sessions from editSessions
+            if (typeof editSessions !== 'undefined' && Array.isArray(editSessions)) {
+                const oldLen = editSessions.length;
+                editSessions = editSessions.filter(s => {
+                    const cleanId = s.id.toString().replace('session_', '');
+                    return !!(studioSessions[`session_${cleanId}`] || studioSessions[cleanId]);
+                });
+                
+                if (editSessions.length !== oldLen) {
+                    if (editSessions.length === 0) {
+                        selectedEditSegmentIdx = null;
+                        hideEditSegmentInspector();
+                    } else if (selectedEditSegmentIdx !== null) {
+                        if (selectedEditSegmentIdx >= editSessions.length) {
+                            selectEditSegment(editSessions.length - 1);
+                        } else {
+                            selectEditSegment(selectedEditSegmentIdx);
+                        }
+                    }
+                    renderEditTimeline();
+                    updateEditChart();
+                }
+            }
+
+            // Prune deleted keys from checkedStudioKeys
+            if (typeof checkedStudioKeys !== 'undefined' && checkedStudioKeys instanceof Set) {
+                const startSize = checkedStudioKeys.size;
+                for (let key of checkedStudioKeys) {
+                    const cleanId = key.toString().replace('session_', '');
+                    if (!(studioSessions[`session_${cleanId}`] || studioSessions[cleanId])) {
+                        checkedStudioKeys.delete(key);
+                    }
+                }
+                if (checkedStudioKeys.size !== startSize) {
+                    updateStudioBatchDeleteButton();
+                }
+            }
+
+            renderStudioRecords();
+            renderMultiviewSidebar();
+            
+            // Refresh detail view if deleted or updated
+            if (selectedSessionId) {
+                const refreshed = studioSessions[`session_${selectedSessionId}`] || studioSessions[selectedSessionId];
+                if (!refreshed) {
+                    clearSelectedViewer();
+                } else {
+                    viewStudioSession(selectedSessionId, false);
+                }
+            }
+        }, (err) => {
+            console.error("Database connection failure:", err);
+            showToast("Studio DB Sync Error: Check connection rules.", true);
+        });
+
+        // --- POPULATING RECORDS LISTS ---
+        function renderStudioRecords() {
+            const container = document.getElementById("studio-records-container");
+            const countBadge = document.getElementById("studio-records-count");
+            if (!container) return;
+
+            const sessions = Object.entries(studioSessions).map(([key, value]) => {
+                const copy = { ...value };
+                copy.dbKey = key;
+                return copy;
+            });
+            if (countBadge) countBadge.innerText = `${sessions.length} sessions`;
+
+            if (sessions.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center text-brand-subtle py-12 text-xs border border-dashed border-gray-200 rounded-xl">
+                        <i class="fa-solid fa-box-open text-xl mb-2 opacity-50"></i>
+                        <p class="font-medium text-brand-dark">No records in Studio sandbox</p>
+                        <p class="text-[10px] text-slate-400 mt-0.5">Pull data from Firebase or upload an Excel file.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const searchQuery = (document.getElementById("studio-search-input")?.value || "").toLowerCase().trim();
+            const sortBy = document.getElementById("studio-sort-select")?.value || "time-desc";
+            
+            const sorted = [...sessions];
+            if (sortBy === "time-desc") {
+                sorted.sort((a, b) => b.timestamp - a.timestamp);
+            } else if (sortBy === "time-asc") {
+                sorted.sort((a, b) => a.timestamp - b.timestamp);
+            } else if (sortBy === "name-asc") {
+                sorted.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+            } else if (sortBy === "name-desc") {
+                sorted.sort((a, b) => (b.title || "").localeCompare(a.title || ""));
+            }
+            
+            container.innerHTML = "";
+            let matchCount = 0;
+
+            sorted.forEach(session => {
+                const cleanId = session.dbKey.toString().replace('session_', '');
+                if (searchQuery && !session.title.toLowerCase().includes(searchQuery)) {
+                    return;
+                }
+                matchCount++;
+
+                const dateStr = new Date(session.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                const durationSec = (session.durationMs / 1000.0).toFixed(1);
+                const pointsCount = session.datapoints ? Object.keys(session.datapoints).length : 0;
+                const isSelected = selectedSessionId === cleanId;
+                const isChecked = checkedStudioKeys.has(cleanId);
+
+                const div = document.createElement("div");
+                div.className = `p-3 rounded-xl border transition-all flex items-center justify-between gap-2 cursor-pointer ${isSelected ? 'bg-emerald-50 border-emerald-300 shadow-xs' : 'bg-white hover:bg-slate-55 border-gray-150'}`;
+                
+                div.onclick = (e) => {
+                    if (e.target.closest('.custom-checkbox-container')) return;
+                    viewStudioSession(cleanId);
+                };
+
+                div.innerHTML = `
+                    <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                        <!-- Custom circular check element matching original layout -->
+                        <div class="custom-checkbox-container flex items-center justify-center w-8 h-8 select-none shrink-0 cursor-pointer" onclick="toggleStudioRecordCheck('${cleanId}', event)">
+                            <div class="w-5 h-5 rounded-full border transition-all flex items-center justify-center ${isChecked ? 'bg-emerald-600 border-emerald-600' : 'bg-white border-slate-300 hover:border-emerald-500'}">
+                                <div class="w-1.5 h-1.5 rounded-full bg-white transition-all ${isChecked ? 'scale-100 opacity-100' : 'scale-0 opacity-0'}"></div>
+                            </div>
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <h4 class="text-xs font-semibold text-brand-dark truncate leading-snug" title="${session.title}">${session.title}</h4>
+                            <div class="flex items-center gap-2 text-[10px] text-brand-subtle mt-0.5">
+                                <span>${dateStr}</span>
+                                <span class="w-1.5 h-1.5 rounded-full bg-slate-200"></span>
+                                <span>${durationSec}s (${pointsCount} pts)</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                container.appendChild(div);
+            });
+
+            if (matchCount === 0) {
+                container.innerHTML = `
+                    <div class="text-center text-brand-subtle py-12 text-xs border border-dashed border-gray-200 rounded-xl">
+                        <i class="fa-solid fa-magnifying-glass text-lg mb-2 opacity-60"></i>
+                        <p class="font-medium text-brand-dark">No matching studio recordings</p>
+                    </div>
+                `;
+            }
+
+            updateStudioBatchDeleteButton();
+        }
+
+        function toggleStudioRecordCheck(id, event) {
+            if (event) {
+                event.stopPropagation();
+            }
+            if (checkedStudioKeys.has(id)) {
+                checkedStudioKeys.delete(id);
+            } else {
+                checkedStudioKeys.add(id);
+            }
+            updateStudioBatchDeleteButton();
+            renderStudioRecords();
+        }
+
+        function updateStudioBatchDeleteButton() {
+            const btn = document.getElementById("studio-multiple-delete");
+            if (!btn) return;
+            if (checkedStudioKeys.size > 0) {
+                btn.disabled = false;
+                btn.className = "text-xs bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 px-3 py-2 rounded-xl transition-colors shrink-0 flex items-center justify-center gap-1 cursor-pointer opacity-100";
+            } else {
+                btn.disabled = true;
+                btn.className = "text-xs bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 px-3 py-2 rounded-xl transition-colors shrink-0 flex items-center justify-center gap-1 opacity-50 cursor-not-allowed";
+            }
+        }
+
+        function deleteCheckedStudioSessions() {
+            const count = checkedStudioKeys.size;
+            if (count === 0) return;
+            
+            openConfirmModal(
+                "Delete Database Session Records",
+                `Are you sure you want to permanently delete the ${count} selected records from the Studio Database?`,
+                () => {
+                    const promises = Array.from(checkedStudioKeys).map(id => db.ref(`sessions/session_${id}`).remove());
+                    Promise.all(promises)
+                        .then(() => {
+                            showToast(`Successfully deleted ${count} metrics.`);
+                            checkedStudioKeys.clear();
+                            updateStudioBatchDeleteButton();
+                        })
+                        .catch(err => {
+                            showToast("Batch delete experienced a database fault.", true);
+                        });
+                }
+            );
+        }
+
+        // --- ACTIVE SESSION DETAILS GRAPH VIEWER ---
+        function viewStudioSession(id, resetScroll = true) {
+            selectedSessionId = id.toString().replace('session_', '');
+            
+            const session = studioSessions[`session_${selectedSessionId}`] || studioSessions[selectedSessionId];
+            if (!session) {
+                clearSelectedViewer();
+                return;
+            }
+
+            const activeViewer = document.getElementById("data-viewer-active");
+            const emptyViewer = document.getElementById("data-viewer-empty");
+            if (activeViewer && emptyViewer) {
+                emptyViewer.classList.add("hidden");
+                activeViewer.classList.remove("hidden");
+            }
+
+            // Show loading overlay immediately
+            const overlay = document.getElementById("chart-loading-overlay");
+            if (overlay) {
+                overlay.classList.remove("hidden");
+            }
+
+            // Fill header titles
+            const titleEl = document.getElementById("viewer-session-title");
+            const dateEl = document.getElementById("viewer-session-date");
+            const durationEl = document.getElementById("viewer-session-duration");
+            const avgEl = document.getElementById("viewer-session-avg");
+            const maxEl = document.getElementById("viewer-session-max");
+
+            if (titleEl) titleEl.innerText = session.title;
+            if (dateEl) dateEl.innerText = new Date(session.timestamp).toLocaleString();
+            
+            const durationSec = (session.durationMs / 1000.0).toFixed(1);
+            if (durationEl) durationEl.innerText = `${durationSec}s`;
+            if (avgEl) avgEl.innerText = session.avgLux ? `${session.avgLux.toFixed(2)} Lv` : "-";
+            if (maxEl) maxEl.innerText = session.maxLux ? `${session.maxLux.toFixed(2)} Lv` : "-";
+
+            renderStudioRecords(); // update active styling
+
+            // Yield thread for browser painting of the loading indicator
+            setTimeout(() => {
+                const rawPoints = session.datapoints ? Object.values(session.datapoints) : [];
+                const sortedPoints = rawPoints.sort((a,b) => a.timeMillis - b.timeMillis);
+
+                buildActiveSessionChart(sortedPoints);
+
+                // Hide loading overlay once chart finishes building
+                if (overlay) {
+                    overlay.classList.add("hidden");
+                }
+            }, 60);
+        }
+
+        function clearSelectedViewer() {
+            selectedSessionId = null;
+            const activeViewer = document.getElementById("data-viewer-active");
+            const emptyViewer = document.getElementById("data-viewer-empty");
+            if (activeViewer && emptyViewer) {
+                activeViewer.classList.add("hidden");
+                emptyViewer.classList.remove("hidden");
+            }
+            if (activeChart) {
+                activeChart.destroy();
+                activeChart = null;
+            }
+            renderStudioRecords();
+        }
+
+        function buildActiveSessionChart(sortedPoints) {
+            const ctx = document.getElementById("active-session-chart");
+            if (!ctx) return;
+
+            if (activeChart) {
+                activeChart.destroy();
+            }
+
+            if (sortedPoints.length === 0) {
+                return;
+            }
+
+            const baseTime = sortedPoints[0].timeMillis;
+            const plist = sortedPoints.map(p => ({
+                x: parseFloat(((p.timeMillis - baseTime) / 1000.0).toFixed(2)),
+                y: p.lux
+            }));
+
+            const canvasCtx = ctx.getContext("2d");
+            const gradient = canvasCtx.createLinearGradient(0, 0, 0, 300);
+            gradient.addColorStop(0, 'rgba(16, 185, 129, 0.25)');
+            gradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+
+            activeChart = new Chart(canvasCtx, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: 'Luminance (Lv)',
+                        data: plist,
+                        borderColor: '#10b981',
+                        borderWidth: 2,
+                        backgroundColor: gradient,
+                        fill: true,
+                        pointRadius: sortedPoints.length > 300 ? 0.5 : 2,
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            grid: { color: '#F8FAFC' },
+                            title: { display: true, text: 'Time (s)', color: '#64748B', font: { size: 10 } }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#F1F5F9' },
+                            title: { display: true, text: 'Brightness (Lv)', color: '#64748B', font: { size: 10 } }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        // --- DIALOG MODALS ENGINE ---
+        let currentConfirmCallback = null;
+
+        function openConfirmModal(title, description, onConfirm) {
+            const modal = document.getElementById("confirm-modal");
+            const tEl = document.getElementById("confirm-title");
+            const dEl = document.getElementById("confirm-desc");
+            const btn = document.getElementById("confirm-action-btn");
+            if (!modal || !tEl || !dEl || !btn) return;
+
+            tEl.innerText = title;
+            dEl.innerText = description;
+            currentConfirmCallback = onConfirm;
+
+            btn.onclick = () => {
+                if (currentConfirmCallback) currentConfirmCallback();
+                closeConfirmModal();
+            };
+
+            modal.classList.remove("hidden");
+        }
+
+        function closeConfirmModal() {
+            const modal = document.getElementById("confirm-modal");
+            if (modal) modal.classList.add("hidden");
+            currentConfirmCallback = null;
+        }
+
+        function renameSelectedSession() {
+            if (!selectedSessionId) return;
+            const session = studioSessions[`session_${selectedSessionId}`] || studioSessions[selectedSessionId];
+            if (!session) return;
+
+            const modal = document.getElementById("rename-modal");
+            const input = document.getElementById("rename-input");
+            const btn = document.getElementById("rename-action-btn");
+            if (!modal || !input || !btn) return;
+
+            input.value = session.title;
+            btn.onclick = () => {
+                const trimmed = input.value.trim();
+                if (trimmed.length === 0) {
+                    showToast("Title cannot be blank.", true);
+                    return;
+                }
+                
+                db.ref(`sessions/session_${selectedSessionId}/title`).set(trimmed)
+                    .then(() => {
+                        showToast(`Session name saved to: "${trimmed}"`);
+                        closeRenameModal();
+                    })
+                    .catch(() => {
+                        showToast("Failed to write updated identifier.", true);
+                    });
+            };
+
+            modal.classList.remove("hidden");
+            input.focus();
+        }
+
+        function closeRenameModal() {
+            const modal = document.getElementById("rename-modal");
+            if (modal) modal.classList.add("hidden");
+        }
+
+        function deleteActiveSession() {
+            if (!selectedSessionId) return;
+            const session = studioSessions[`session_${selectedSessionId}`] || studioSessions[selectedSessionId];
+            if (!session) return;
+
+            openConfirmModal(
+                "Delete Laboratory Recording",
+                `Confirming final removal of recording: "${session.title}"? This cannot be undone.`,
+                () => {
+                    db.ref(`sessions/session_${selectedSessionId}`).remove()
+                        .then(() => {
+                            showToast("Record successfully erased.");
+                            clearSelectedViewer();
+                        })
+                        .catch(() => {
+                            showToast("Database reported storage restriction.", true);
+                        });
+                }
+            );
+        }
+
+        // --- SINGLE SESSION EXCEL DOWNLOAD ---
+        function downloadActiveSessionExcel() {
+            if (!selectedSessionId) return;
+            const session = studioSessions[`session_${selectedSessionId}`] || studioSessions[selectedSessionId];
+            if (!session) return;
+
+            const rawPoints = session.datapoints ? Object.values(session.datapoints) : [];
+            if (rawPoints.length === 0) {
+                showToast("Cannot export empty dataset.", true);
+                return;
+            }
+
+            const sorted = rawPoints.sort((a,b) => a.timeMillis - b.timeMillis);
+            const baseTime = sorted[0].timeMillis;
+            const excelRows = sorted.map(p => ({
+                "t": parseFloat(((p.timeMillis - baseTime) / 1000.0).toFixed(3)),
+                "Lv": p.lux
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(excelRows);
+            applyXlsxFormatting(ws);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Telemetry Session");
+
+            const sanitizedName = sanitizeFilename(session.title);
+            XLSX.writeFile(wb, `${sanitizedName}.xlsx`);
+            showToast("Spreadsheet successfully downloaded.");
+        }
+
+        function sanitizeFilename(name) {
+            return name.replace(/[^a-z0-9_\-\u4e00-\u9fa5]/gi, "_").toLowerCase();
+        }
+
+        function applyXlsxFormatting(ws) {
+            if (!ws) return;
+            ws["!cols"] = [{ wch: 12 }, { wch: 15 }];
+        }
+
+        // --- DATA INTEGRATION: PULLING FROM CLASSIC sandbox FIREBASE ---
+        function openOriginalDbDrawer() {
+            const drawer = document.getElementById("original-db-drawer");
+            const backdrop = document.getElementById("drawer-backdrop");
+            if (drawer && backdrop) {
+                backdrop.classList.remove("hidden");
+                drawer.classList.remove("translate-x-full");
+                // Fetch sandbox keys
+                fetchOriginalSandboxData();
+            }
+        }
+
+        function closeOriginalDbDrawer() {
+            const drawer = document.getElementById("original-db-drawer");
+            const backdrop = document.getElementById("drawer-backdrop");
+            if (drawer && backdrop) {
+                drawer.classList.add("translate-x-full");
+                setTimeout(() => backdrop.classList.add("hidden"), 300);
+            }
+        }
+
+        function fetchOriginalSandboxData() {
+            const container = document.getElementById("original-records-container");
+            if (container) {
+                container.innerHTML = `
+                    <div class="text-center text-brand-subtle py-12 text-xs">
+                        <i class="fa-solid fa-spinner fa-spin text-lg mb-2 text-emerald-500"></i>
+                        <p>Listing remote indexes...</p>
+                    </div>
+                `;
+            }
+
+            originalDb.ref("sessions").once("value", (snap) => {
+                originalSessions = snap.val() || {};
+                renderOriginalRecords();
+            }, (err) => {
+                console.error("Original DB fetch error:", err);
+                if (container) {
+                    container.innerHTML = `
+                        <div class="text-center text-rose-500 py-12 text-xs">
+                            <i class="fa-solid fa-triangle-exclamation text-xl mb-2"></i>
+                            <p class="font-semibold">Access restricted. Verify Firebase API bindings.</p>
+                        </div>
+                    `;
+                }
+            });
+        }
+
+        function renderOriginalRecords() {
+            const container = document.getElementById("original-records-container");
+            if (!container) return;
+
+            const sessions = Object.values(originalSessions);
+            if (sessions.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center text-brand-subtle py-12 text-xs border border-dashed border-gray-200 rounded-xl bg-white m-2">
+                        <i class="fa-solid fa-box-open text-xl mb-2 opacity-50"></i>
+                        <p class="font-medium text-brand-dark">No sandbox records located</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const searchQuery = (document.getElementById("original-search-input")?.value || "").toLowerCase().trim();
+            const sorted = sessions.sort((a,b) => b.timestamp - a.timestamp);
+            
+            container.innerHTML = "";
+            let matchCount = 0;
+
+            sorted.forEach(session => {
+                const cleanId = session.id.toString().replace('session_', '');
+                if (searchQuery && !session.title.toLowerCase().includes(searchQuery)) {
+                    return;
+                }
+                matchCount++;
+
+                const dateStr = new Date(session.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                const durationSec = (session.durationMs / 1000.0).toFixed(1);
+                const pointsCount = session.datapoints ? Object.keys(session.datapoints).length : 0;
+                const isChecked = checkedOriginalKeys.has(cleanId);
+
+                // Check if already matches in Studio db to present a nice synced badge
+                const isAlreadyPresent = !!(studioSessions[`session_${cleanId}`] || studioSessions[cleanId]);
+
+                const div = document.createElement("div");
+                div.className = `p-3.5 bg-white border border-gray-150 rounded-xl transition-all shadow-xs flex items-center justify-between gap-3 ${isAlreadyPresent ? 'opacity-80' : ''}`;
+                
+                div.innerHTML = `
+                    <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                        <input type="checkbox" onchange="toggleOriginalRecordCheck('${cleanId}')" ${isChecked ? 'checked' : ''} class="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer shrink-0">
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-1.5 min-w-0">
+                                <h4 class="text-xs font-semibold text-brand-dark truncate leading-tight" title="${session.title}">${session.title}</h4>
+                                ${isAlreadyPresent ? '<span class="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 text-[8px] font-bold uppercase rounded-md border border-emerald-100 shrink-0">Synced</span>' : ''}
+                            </div>
+                            <div class="flex items-center gap-2 text-[10px] text-brand-subtle mt-0.5">
+                                <span>${dateStr}</span>
+                                <span class="w-1 h-1 bg-gray-300 rounded-full"></span>
+                                <span>${durationSec}s (${pointsCount} pts)</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="shrink-0 flex items-center gap-1.5">
+                        <button onclick="pullSingleOriginalSession('${cleanId}')" class="text-[10px] py-1 px-2.5 rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 bg-emerald-50/20 font-semibold transition-all">
+                            Pull
+                        </button>
+                    </div>
+                `;
+
+                container.appendChild(div);
+            });
+
+            if (matchCount === 0) {
+                container.innerHTML = `
+                    <div class="text-center text-brand-subtle py-12 text-xs bg-white border border-dashed border-gray-200 rounded-xl m-2">
+                        <i class="fa-solid fa-magnifying-glass text-lg mb-2 opacity-60"></i>
+                        <p class="font-medium text-brand-dark">No sandbox matches found</p>
+                    </div>
+                `;
+            }
+
+            updateOriginalBatchImportButton();
+        }
+
+        function toggleOriginalRecordCheck(id) {
+            if (checkedOriginalKeys.has(id)) {
+                checkedOriginalKeys.delete(id);
+            } else {
+                checkedOriginalKeys.add(id);
+            }
+            updateOriginalBatchImportButton();
+        }
+
+        function updateOriginalBatchImportButton() {
+            const btn = document.getElementById("import-checked-btn");
+            const badge = document.getElementById("checked-original-count");
+            if (!btn || !badge) return;
+
+            badge.innerText = checkedOriginalKeys.size;
+            if (checkedOriginalKeys.size > 0) {
+                btn.disabled = false;
+                btn.className = "text-xs bg-emerald-600 text-white font-semibold px-4 py-1.5 rounded-xl flex items-center gap-1 hover:bg-emerald-700 transition-colors pointer-events-auto opacity-100 cursor-pointer";
+            } else {
+                btn.disabled = true;
+                btn.className = "text-xs bg-emerald-600/70 text-white/80 font-semibold px-4 py-1.5 rounded-xl flex items-center gap-1 transition-colors opacity-50 cursor-not-allowed pointer-events-none";
+            }
+        }
+
+        function pullSingleOriginalSession(id) {
+            const session = originalSessions[`session_${id}`] || originalSessions[id];
+            if (!session) return;
+
+            // Push directly to Studio database
+            db.ref(`sessions/session_${id}`).set(session)
+                .then(() => {
+                    showToast(`Successfully synchronized metrics: "${session.title}"`);
+                    renderOriginalRecords(); // updates "Synced" badges
+                })
+                .catch(err => {
+                    showToast("Database transfer error.", true);
+                });
+        }
+
+        function importCheckedOriginalSessions() {
+            const keys = Array.from(checkedOriginalKeys);
+            if (keys.length === 0) return;
+
+            showToast(`Synchronizing ${keys.length} recordings, please wait...`);
+            const promises = keys.map(key => {
+                const session = originalSessions[`session_${key}`] || originalSessions[key];
+                if (session) {
+                    return db.ref(`sessions/session_${key}`).set(session);
+                }
+                return Promise.resolve();
+            });
+
+            Promise.all(promises)
+                .then(() => {
+                    showToast(`Successfully transferred ${keys.length} items to Studio.`);
+                    checkedOriginalKeys.clear();
+                    updateOriginalBatchImportButton();
+                    renderOriginalRecords();
+                })
+                .catch(() => {
+                    showToast("Failed to complete full matrix handshake transfer.", true);
+                });
+        }
+
+        // --- DATA INTEGRATION 2: EXCEL SPREADSHEET IMPORT PARSER ---
+        function handleExcelFileUpload(event) {
+            const files = Array.from(event.target.files);
+            if (files.length === 0) return;
+
+            let successCount = 0;
+            let lastSessionId = null;
+            let processedCount = 0;
+
+            files.forEach((file, fileIdx) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        
+                        // Grab first sheet
+                        const sheetName = workbook.SheetNames[0];
+                        const sheet = workbook.Sheets[sheetName];
+                        const rows = XLSX.utils.sheet_to_json(sheet);
+                        
+                        if (rows.length === 0) {
+                            showToast(`Excel sheet in "${file.name}" is empty.`, true);
+                            finalizeFileProcess();
+                            return;
+                        }
+
+                        // Look for valid columns: t, Lv
+                        const points = [];
+                        
+                        rows.forEach((row, index) => {
+                            // Support various naming conventions (e.g., t / time, Lv / lux / luminance)
+                            const tVal = row.t !== undefined ? row.t : (row.time !== undefined ? row.time : null);
+                            const luxVal = row.Lv !== undefined ? row.Lv : (row.lux !== undefined ? row.lux : (row.luminance !== undefined ? row.luminance : null));
+
+                            if (tVal !== null && luxVal !== null) {
+                                const secs = parseFloat(tVal);
+                                const val = parseFloat(luxVal);
+                                
+                                if (!isNaN(secs) && !isNaN(val)) {
+                                    const timeMillis = Math.round(secs * 1000);
+                                    points.push({
+                                        timeMillis: timeMillis,
+                                        lux: val
+                                    });
+                                }
+                            }
+                        });
+
+                        if (points.length === 0) {
+                            showToast(`No valid telemetry columns (t and Lv) in "${file.name}".`, true);
+                            finalizeFileProcess();
+                            return;
+                        }
+
+                        // Compute basic stats
+                        let sum = 0;
+                        let maxVal = points[0].lux;
+                        let minVal = points[0].lux;
+                        
+                        points.forEach(p => {
+                            sum += p.lux;
+                            if (p.lux > maxVal) maxVal = p.lux;
+                            if (p.lux < minVal) minVal = p.lux;
+                        });
+                        
+                        const avgVal = sum / points.length;
+                        const durationMs = points[points.length - 1].timeMillis - points[0].timeMillis;
+                        
+                        // Create session structure
+                        const baseFilename = file.name.replace(/\.[^/.]+$/, ""); // strip extension
+                        const customTitle = baseFilename.replace(/_/g, " ");
+
+                        // Ensure absolute uniqueness across files processed in the same millisecond
+                        const uniqueIdSuffix = Date.now() + "_" + fileIdx + "_" + Math.floor(Math.random() * 1000);
+                        const sessionId = "session_" + uniqueIdSuffix;
+                        const sessionDbId = Date.now() + fileIdx;
+                        const newSession = {
+                            id: sessionDbId,
+                            title: customTitle,
+                            timestamp: Date.now() + (fileIdx * 10), // slight offset to maintain chronological insertion
+                            durationMs: durationMs > 0 ? durationMs : (points.length * 100), // default to 100ms interval
+                            avgLux: avgVal,
+                            maxLux: maxVal,
+                            minLux: minVal,
+                            datapoints: points
+                        };
+
+                        // Set onto Studio database
+                        db.ref(`sessions/${sessionId}`).set(newSession)
+                            .then(() => {
+                                successCount++;
+                                lastSessionId = sessionId;
+                                finalizeFileProcess();
+                            })
+                            .catch(() => {
+                                showToast(`Database storage failed for "${file.name}".`, true);
+                                finalizeFileProcess();
+                            });
+
+                    } catch (err) {
+                        console.error("Excel parser error:", err);
+                        showToast(`Error processing formatting of "${file.name}".`, true);
+                        finalizeFileProcess();
+                    }
+                };
+
+                reader.readAsArrayBuffer(file);
+            });
+
+            function finalizeFileProcess() {
+                processedCount++;
+                if (processedCount === files.length) {
+                    if (successCount > 0) {
+                        showToast(`Successfully imported ${successCount} Excel file(s).`);
+                        if (lastSessionId) {
+                            viewStudioSession(lastSessionId);
+                        }
+                    }
+                    // Clear input so it can be re-triggered
+                    event.target.value = "";
+                }
+            }
+        }
+
+
+        // ==========================================
+        //         TAB LAYER 2: TELEMETRY EDIT ENGINE
+        // ==========================================
+
+        function getSessionTimeParts(timestamp) {
+            const d = new Date(timestamp);
+            let hours = d.getHours();
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12;
+            hours = hours ? hours : 12; // 0 hour should be 12
+            const minutes = d.getMinutes();
+            const seconds = d.getSeconds();
+            return { h: hours, m: minutes, s: seconds, ampm: ampm };
+        }
+
+        function timeToSeconds(h, m, s, ampm) {
+            let hours = parseInt(h) || 0;
+            let mins = parseInt(m) || 0;
+            let secs = parseInt(s) || 0;
+            
+            if (ampm === 'PM' && hours !== 12) {
+                hours += 12;
+            } else if (ampm === 'AM' && hours === 12) {
+                hours = 0;
+            }
+            return (hours * 3600) + (mins * 60) + secs;
+        }
+
+        function openSelectEditSegmentDropdown(event) {
+            if (event) event.stopPropagation();
+            const dropdown = document.getElementById("edit-add-dropdown");
+            if (!dropdown) return;
+            
+            const list = document.getElementById("edit-add-dropdown-list");
+            if (!list) return;
+            
+            const sessions = Object.values(studioSessions);
+            if (sessions.length === 0) {
+                list.innerHTML = `
+                    <div class="text-center py-4 text-[11px] text-slate-400">
+                        No telemetry sessions sync'd yet.
+                    </div>
+                `;
+                dropdown.classList.toggle("hidden");
+                return;
+            }
+            
+            list.innerHTML = "";
+            // Sort sessions to view most recent first
+            const sortedSessions = sessions.sort((a,b) => b.timestamp - a.timestamp);
+            
+            sortedSessions.forEach(session => {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "w-full text-left font-medium text-xs px-2.5 py-2 hover:bg-emerald-50/50 hover:text-emerald-800 transition-colors text-brand-dark rounded-xl flex items-center justify-between gap-1 border border-transparent hover:border-emerald-100/30";
+                btn.onclick = () => {
+                    addSessionToEdit(session.id);
+                };
+                
+                btn.innerHTML = `
+                    <div class="truncate max-w-[170px] font-semibold" title="${session.title}">${session.title}</div>
+                    <span class="text-[9px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md font-mono shrink-0">${(session.durationMs / 1000).toFixed(1)}s</span>
+                `;
+                list.appendChild(btn);
+            });
+            
+            dropdown.classList.toggle("hidden");
+        }
+
+        function addSessionToEdit(id) {
+            const cleanId = id.toString().replace('session_', '');
+            const session = studioSessions[`session_${cleanId}`] || studioSessions[cleanId];
+            if (!session) return;
+            
+            const rawPoints = session.datapoints ? Object.values(session.datapoints) : [];
+            if (rawPoints.length === 0) {
+                showToast("Cannot import an empty session.", true);
+                return;
+            }
+            
+            const sorted = rawPoints.sort((a,b) => a.timeMillis - b.timeMillis);
+            const baseTime = sorted[0].timeMillis;
+            const durationMs = session.durationMs || (sorted[sorted.length - 1].timeMillis - baseTime) || 1;
+            const durationSec = durationMs / 1000.0;
+            
+            const tParts = getSessionTimeParts(session.timestamp);
+            
+            // Choose unused colors
+            const usedColors = new Set(editSessions.map(item => item.color));
+            let color = M365_COLORS[0].hex;
+            for (let col of M365_COLORS) {
+                if (!usedColors.has(col.hex)) {
+                    color = col.hex;
+                    break;
+                }
+            }
+            if (usedColors.has(color)) {
+                color = M365_COLORS[editSessions.length % M365_COLORS.length].hex;
+            }
+
+            const newSegment = {
+                uniqueId: "edit_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+                id: cleanId,
+                title: session.title,
+                timestamp: session.timestamp,
+                originalDurationSec: durationSec,
+                durationMs: durationMs,
+                rawDatapoints: sorted,
+                startTime: tParts,
+                trimStart: 0,
+                trimEnd: 0,
+                color: color
+            };
+            
+            editSessions.push(newSegment);
+            selectedEditSegmentIdx = editSessions.length - 1;
+            
+            showToast(`Added to timeline: "${session.title}"`);
+            renderEditTimeline();
+            selectEditSegment(selectedEditSegmentIdx);
+            updateEditChart();
+            
+            const dropdown = document.getElementById("edit-add-dropdown");
+            if (dropdown) dropdown.classList.add("hidden");
+        }
+
+        // --- EDIT WORKSPACE DRAG & DROP REORDERING ---
+        let editDragSourceIdx = null;
+
+        function handleEditDragStart(event, idx) {
+            editDragSourceIdx = idx;
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', idx);
+            event.currentTarget.classList.add('opacity-40');
+        }
+
+        function handleEditDragOver(event, idx) {
+            event.preventDefault();
+            event.currentTarget.classList.add('border-emerald-500', 'bg-emerald-50/10');
+        }
+
+        function handleEditDragLeave(event) {
+            event.currentTarget.classList.remove('border-emerald-500', 'bg-emerald-50/10');
+        }
+
+        function handleEditDrop(event, targetIdx) {
+            event.preventDefault();
+            event.currentTarget.classList.remove('border-emerald-500', 'bg-emerald-50/10');
+
+            if (editDragSourceIdx !== null && editDragSourceIdx !== targetIdx) {
+                const draggedItem = editSessions[editDragSourceIdx];
+                editSessions.splice(editDragSourceIdx, 1);
+                editSessions.splice(targetIdx, 0, draggedItem);
+                
+                // Track selected index
+                if (selectedEditSegmentIdx === editDragSourceIdx) {
+                    selectedEditSegmentIdx = targetIdx;
+                } else if (selectedEditSegmentIdx === targetIdx) {
+                    selectedEditSegmentIdx = editDragSourceIdx;
+                } else if (selectedEditSegmentIdx > editDragSourceIdx && selectedEditSegmentIdx < targetIdx) {
+                    selectedEditSegmentIdx--;
+                } else if (selectedEditSegmentIdx < editDragSourceIdx && selectedEditSegmentIdx > targetIdx) {
+                    selectedEditSegmentIdx++;
+                }
+                
+                renderEditTimeline();
+                updateEditChart();
+            }
+        }
+
+        function handleEditDragEnd(event) {
+            event.currentTarget.classList.remove('opacity-40');
+            editDragSourceIdx = null;
+        }
+
+        function renderEditTimeline() {
+            const track = document.getElementById("edit-timeline-track");
+            if (!track) return;
+            
+            if (editSessions.length === 0) {
+                track.innerHTML = `
+                    <div class="text-center text-slate-400 text-xs w-full py-4 select-none">
+                        Stitching Timeline track is empty. Add a segment to begin alignment.
+                    </div>
+                `;
+                return;
+            }
+            
+            track.innerHTML = "";
+            editSessions.forEach((s, idx) => {
+                const isSelected = selectedEditSegmentIdx === idx;
+                const div = document.createElement("div");
+                div.className = `min-w-[190px] max-w-[240px] flex-shrink-0 bg-white border rounded-xl p-2.5 flex flex-col justify-between transition-all duration-150 cursor-grab active:cursor-grabbing hover:shadow-xs select-none relative ${isSelected ? 'ring-2 ring-emerald-500 border-emerald-500 shadow-sm' : 'border-gray-200'}`;
+                div.draggable = true;
+                
+                div.addEventListener('dragstart', (e) => handleEditDragStart(e, idx));
+                div.addEventListener('dragover', (e) => handleEditDragOver(e, idx));
+                div.addEventListener('dragleave', (e) => handleEditDragLeave(e));
+                div.addEventListener('drop', (e) => handleEditDrop(e, idx));
+                div.addEventListener('dragend', (e) => handleEditDragEnd(e));
+                
+                div.onclick = (e) => {
+                    if (e.target.closest('.delete-btn')) return;
+                    selectEditSegment(idx);
+                };
+                
+                const startStr = `${s.startTime.ampm} ${s.startTime.h.toString().padStart(2, '0')}:${s.startTime.m.toString().padStart(2, '0')}:${s.startTime.s.toString().padStart(2, '0')}`;
+                const effectiveDuration = (s.originalDurationSec - s.trimStart - s.trimEnd).toFixed(1);
+                
+                div.innerHTML = `
+                    <div class="flex items-start justify-between gap-1.5">
+                        <div class="flex items-center gap-1.5 min-w-0 flex-1">
+                            <span class="w-2.5 h-2.5 rounded-full inline-block shrink-0 border border-slate-300" style="background-color: ${s.color}"></span>
+                            <h4 class="text-xs font-semibold text-brand-dark truncate leading-tight" title="${s.title}">${s.title}</h4>
+                        </div>
+                        <button onclick="removeEditSegmentAt(${idx}); event.stopPropagation();" class="delete-btn text-slate-400 hover:text-red-500 text-[11px] p-0.5 rounded-md hover:bg-slate-50 transition-all shrink-0" title="Remove Segment">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="mt-2 flex items-center justify-between text-[10px]">
+                        <span class="text-slate-400 font-medium">Starts: <span class="font-mono text-brand-dark font-semibold">${startStr}</span></span>
+                    </div>
+                    <div class="mt-1 flex items-center justify-between text-[9px] text-slate-400 border-t border-dashed border-slate-100 pt-1">
+                        <span>Duration: <span class="font-semibold font-mono text-slate-600">${effectiveDuration}s</span></span>
+                        <span class="flex items-center gap-0.5"><i class="fa-solid fa-grip-vertical"></i> Move</span>
+                    </div>
+                `;
+                track.appendChild(div);
+            });
+        }
+
+        function removeEditSegmentAt(idx) {
+            editSessions.splice(idx, 1);
+            if (selectedEditSegmentIdx === idx) {
+                selectedEditSegmentIdx = editSessions.length > 0 ? 0 : null;
+            } else if (selectedEditSegmentIdx > idx) {
+                selectedEditSegmentIdx--;
+            }
+            renderEditTimeline();
+            if (selectedEditSegmentIdx !== null) {
+                selectEditSegment(selectedEditSegmentIdx);
+            } else {
+                hideEditSegmentInspector();
+            }
+            updateEditChart();
+            showToast("Segment removed from stitch workspace.");
+        }
+
+        function removeSelectedEditSegment() {
+            if (selectedEditSegmentIdx !== null) {
+                removeEditSegmentAt(selectedEditSegmentIdx);
+            }
+        }
+
+        function hideEditSegmentInspector() {
+            selectedEditSegmentIdx = null;
+            const empty = document.getElementById("edit-segment-empty");
+            const active = document.getElementById("edit-segment-active");
+            if (empty && active) {
+                empty.classList.remove("hidden");
+                active.classList.add("hidden");
+            }
+        }
+
+        function selectEditSegment(idx) {
+            if (idx === null || idx < 0 || idx >= editSessions.length) {
+                hideEditSegmentInspector();
+                return;
+            }
+            selectedEditSegmentIdx = idx;
+            
+            renderEditTimeline();
+            
+            const s = editSessions[idx];
+            const empty = document.getElementById("edit-segment-empty");
+            const active = document.getElementById("edit-segment-active");
+            if (empty && active) {
+                empty.classList.add("hidden");
+                active.classList.remove("hidden");
+            }
+            
+            const titleEl = document.getElementById("edit-active-segment-title");
+            if (titleEl) titleEl.innerText = s.title;
+            
+            document.getElementById("edit-segment-ampm").value = s.startTime.ampm;
+            document.getElementById("edit-segment-h").value = s.startTime.h;
+            document.getElementById("edit-segment-m").value = s.startTime.m;
+            document.getElementById("edit-segment-s").value = s.startTime.s;
+            
+            const trimStartInp = document.getElementById("edit-segment-trim-start");
+            const trimEndInp = document.getElementById("edit-segment-trim-end");
+            
+            trimStartInp.max = s.originalDurationSec;
+            trimEndInp.max = s.originalDurationSec;
+            
+            trimStartInp.value = s.trimStart;
+            trimEndInp.value = s.trimEnd;
+            
+            const trimStartLbl = document.getElementById("edit-trim-start-lbl");
+            const trimEndLbl = document.getElementById("edit-trim-end-lbl");
+            if (trimStartLbl) trimStartLbl.innerText = s.trimStart.toFixed(1) + "s";
+            if (trimEndLbl) trimEndLbl.innerText = s.trimEnd.toFixed(1) + "s";
+        }
+
+        function applyActiveSegmentInputs() {
+            if (selectedEditSegmentIdx === null) return;
+            const s = editSessions[selectedEditSegmentIdx];
+            
+            let hVal = parseInt(document.getElementById("edit-segment-h").value);
+            let mVal = parseInt(document.getElementById("edit-segment-m").value);
+            let sVal = parseInt(document.getElementById("edit-segment-s").value);
+            const ampmVal = document.getElementById("edit-segment-ampm").value;
+            
+            // Clamp inputs safely
+            if (isNaN(hVal) || hVal < 1) hVal = 12;
+            if (hVal > 12) hVal = 12;
+            if (isNaN(mVal) || mVal < 0) mVal = 0;
+            if (mVal > 59) mVal = 59;
+            if (isNaN(sVal) || sVal < 0) sVal = 0;
+            if (sVal > 59) sVal = 59;
+            
+            s.startTime.h = hVal;
+            s.startTime.m = mVal;
+            s.startTime.s = sVal;
+            s.startTime.ampm = ampmVal;
+            
+            renderEditTimeline();
+            updateEditChart();
+        }
+
+        function applyActiveSegmentTrim() {
+            if (selectedEditSegmentIdx === null) return;
+            const s = editSessions[selectedEditSegmentIdx];
+            
+            const trimStartInp = document.getElementById("edit-segment-trim-start");
+            const trimEndInp = document.getElementById("edit-segment-trim-end");
+            const trimStartLbl = document.getElementById("edit-trim-start-lbl");
+            const trimEndLbl = document.getElementById("edit-trim-end-lbl");
+            
+            const ts = parseFloat(trimStartInp.value) || 0;
+            const te = parseFloat(trimEndInp.value) || 0;
+            
+            s.trimStart = ts;
+            s.trimEnd = te;
+            
+            if (trimStartLbl) trimStartLbl.innerText = ts.toFixed(1) + "s";
+            if (trimEndLbl) trimEndLbl.innerText = te.toFixed(1) + "s";
+            
+            renderEditTimeline();
+            updateEditChart();
+        }
+
+        // --- GLOBAL TIMELINE TRIM TOGGLERS ---
+        function toggleGlobalTrimCheck() {
+            const checked = document.getElementById("edit-global-trim-check").checked;
+            const panel = document.getElementById("edit-global-trim-inputs");
+            if (panel) {
+                if (checked) {
+                    panel.classList.remove("hidden");
+                    // Auto default global values from earliest and latest points
+                    initializeGlobalTrimInputs();
+                } else {
+                    panel.classList.add("hidden");
+                }
+            }
+            updateEditChart();
+        }
+
+        function initializeGlobalTrimInputs() {
+            if (editSessions.length === 0) return;
+            
+            let minS = 86400;
+            let maxS = 0;
+            
+            editSessions.forEach(s => {
+                const sOffset = timeToSeconds(s.startTime.h, s.startTime.m, s.startTime.s, s.startTime.ampm);
+                const sEnd = sOffset + (s.originalDurationSec - s.trimStart - s.trimEnd);
+                if (sOffset < minS) minS = sOffset;
+                if (sEnd > maxS) maxS = sEnd;
+            });
+            
+            // Populate Start inputs
+            const sh = Math.floor(minS / 3600);
+            const sm = Math.floor((minS % 3600) / 60);
+            const ss = Math.floor(minS % 60);
+            const sampm = sh >= 12 ? 'PM' : 'AM';
+            let sDisp = sh % 12;
+            sDisp = sDisp ? sDisp : 12;
+            
+            document.getElementById("edit-global-start-h").value = sDisp;
+            document.getElementById("edit-global-start-m").value = sm;
+            document.getElementById("edit-global-start-s").value = ss;
+            document.getElementById("edit-global-start-ampm").value = sampm;
+            
+            // Populate End inputs
+            const eh = Math.floor(maxS / 3600);
+            const em = Math.floor((maxS % 3600) / 60);
+            const es = Math.floor(maxS % 60);
+            const eampm = eh >= 12 ? 'PM' : 'AM';
+            let eDisp = eh % 12;
+            eDisp = eDisp ? eDisp : 12;
+            
+            document.getElementById("edit-global-end-h").value = eDisp;
+            document.getElementById("edit-global-end-m").value = em;
+            document.getElementById("edit-global-end-s").value = es;
+            document.getElementById("edit-global-end-ampm").value = eampm;
+        }
+
+        function applyGlobalTrimConfig() {
+            // Live validation and redraw
+            updateEditChart();
+        }
+
+        function updateEditChart() {
+            const emptyState = document.getElementById("edit-chart-empty-state");
+            const canvas = document.getElementById("edit-chart");
+            if (!canvas) return;
+
+            if (editSessions.length === 0) {
+                if (emptyState) emptyState.classList.remove("hidden");
+                if (editChartInstance) {
+                    editChartInstance.destroy();
+                    editChartInstance = null;
+                }
+                return;
+            }
+            
+            if (emptyState) emptyState.classList.add("hidden");
+            
+            // Parse global trim configurations
+            const gTrimCheck = document.getElementById("edit-global-trim-check");
+            const isGlobalTrim = gTrimCheck ? gTrimCheck.checked : false;
+            
+            let gStartSecs = 0;
+            let gEndSecs = 86450; 
+            
+            if (isGlobalTrim) {
+                const gh = document.getElementById("edit-global-start-h").value;
+                const gm = document.getElementById("edit-global-start-m").value;
+                const gs = document.getElementById("edit-global-start-s").value;
+                const gampm = document.getElementById("edit-global-start-ampm").value;
+                
+                const gEh = document.getElementById("edit-global-end-h").value;
+                const gEm = document.getElementById("edit-global-end-m").value;
+                const gEs = document.getElementById("edit-global-end-s").value;
+                const gEampm = document.getElementById("edit-global-end-ampm").value;
+                
+                gStartSecs = timeToSeconds(gh, gm, gs, gampm);
+                gEndSecs = timeToSeconds(gEh, gEm, gEs, gEampm);
+            }
+
+            const datasets = [];
+            
+            editSessions.forEach(s => {
+                const startSecs = timeToSeconds(s.startTime.h, s.startTime.m, s.startTime.s, s.startTime.ampm);
+                const data = [];
+                
+                if (s.rawDatapoints && s.rawDatapoints.length > 0) {
+                    const baseTime = s.rawDatapoints[0].timeMillis;
+                    s.rawDatapoints.forEach(p => {
+                        const elapsedSec = (p.timeMillis - baseTime) / 1000.0;
+                        
+                        // Crop validations
+                        if (elapsedSec >= s.trimStart && elapsedSec <= (s.originalDurationSec - s.trimEnd)) {
+                            const timelineT = startSecs + (elapsedSec - s.trimStart);
+                            
+                            // Crop validation bounds globally
+                            if (!isGlobalTrim || (timelineT >= gStartSecs && timelineT <= gEndSecs)) {
+                                data.push({
+                                    x: timelineT,
+                                    y: p.lux
+                                });
+                            }
+                        }
+                    });
+                }
+                
+                datasets.push({
+                    label: s.title,
+                    data: data,
+                    borderColor: s.color,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2.5,
+                    pointRadius: s.rawDatapoints.length > 300 ? 0.3 : 1.5,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: s.color,
+                    fill: false,
+                    tension: 0.1
+                });
+            });
+
+            const ctx = canvas.getContext("2d");
+            if (editChartInstance) {
+                editChartInstance.destroy();
+            }
+
+            editChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: { datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    scales: {
+                        x: {
+                            type: "linear",
+                            ticks: {
+                                color: "#64748B",
+                                font: { size: 10, family: 'Instrument Sans' },
+                                callback: function(value) {
+                                    let totalSecs = Math.round(value);
+                                    if (totalSecs < 0) totalSecs = 0;
+                                    totalSecs = totalSecs % 86400; // clamp within 24h
+                                    const hrs = Math.floor(totalSecs / 3600);
+                                    const mins = Math.floor((totalSecs % 3600) / 60);
+                                    const secs = totalSecs % 60;
+                                    const ampm = hrs >= 12 ? 'PM' : 'AM';
+                                    let displayHrs = hrs % 12;
+                                    displayHrs = displayHrs ? displayHrs : 12;
+                                    return `${displayHrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')} ${ampm}`;
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Stitched Day Timeline (H:M:S)',
+                                color: "#64748B",
+                                font: { size: 11, weight: 'medium' }
+                            }
+                        },
+                        y: {
+                            ticks: { color: "#64748B", font: { size: 10 } },
+                            title: {
+                                display: true,
+                                text: 'Luminance (Lv)',
+                                color: "#64748B",
+                                font: { size: 11, weight: 'medium' }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                color: '#334155',
+                                font: { size: 11, family: 'Instrument Sans' }
+                    }
+                },
+                        tooltip: {
+                            enabled: true,
+                            backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                            titleColor: '#ffffff',
+                            bodyColor: '#34d399',
+                            padding: 10,
+                            callbacks: {
+                                title: function(context) {
+                                    let totalSecs = Math.round(context[0].parsed.x);
+                                    const hrs = Math.floor(totalSecs / 3600);
+                                    const mins = Math.floor((totalSecs % 3600) / 60);
+                                    const secs = totalSecs % 60;
+                                    const ampm = hrs >= 12 ? 'PM' : 'AM';
+                                    let displayHrs = hrs % 12;
+                                    displayHrs = displayHrs ? displayHrs : 12;
+                                    return `Time: ${displayHrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')} ${ampm} (${totalSecs}s)`;
+                                },
+                                label: function(context) {
+                                    return `${context.dataset.label}: ${context.parsed.y.toFixed(3)} Lv`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // --- EXPORT TIMELINE TO SPREADSHEET (Gap Blank compliant) ---
+        function exportEditSessionExcel() {
+            if (editSessions.length === 0) {
+                showToast("Cannot export empty Stitch Workspace.", true);
+                return;
+            }
+            
+            const gTrimCheck = document.getElementById("edit-global-trim-check");
+            const isGlobalTrim = gTrimCheck ? gTrimCheck.checked : false;
+            
+            let gStartSecs = 0;
+            let gEndSecs = 86400;
+            
+            if (isGlobalTrim) {
+                const gh = document.getElementById("edit-global-start-h").value;
+                const gm = document.getElementById("edit-global-start-m").value;
+                const gs = document.getElementById("edit-global-start-s").value;
+                const gampm = document.getElementById("edit-global-start-ampm").value;
+                
+                const gEh = document.getElementById("edit-global-end-h").value;
+                const gEm = document.getElementById("edit-global-end-m").value;
+                const gEs = document.getElementById("edit-global-end-s").value;
+                const gEampm = document.getElementById("edit-global-end-ampm").value;
+                
+                gStartSecs = timeToSeconds(gh, gm, gs, gampm);
+                gEndSecs = timeToSeconds(gEh, gEm, gEs, gEampm);
+            }
+
+            const pool = [];
+            editSessions.forEach(s => {
+                const startSecs = timeToSeconds(s.startTime.h, s.startTime.m, s.startTime.s, s.startTime.ampm);
+                if (s.rawDatapoints && s.rawDatapoints.length > 0) {
+                    const baseTime = s.rawDatapoints[0].timeMillis;
+                    s.rawDatapoints.forEach(p => {
+                        const elapsedSec = (p.timeMillis - baseTime) / 1000.0;
+                        if (elapsedSec >= s.trimStart && elapsedSec <= (s.originalDurationSec - s.trimEnd)) {
+                            const timelineSecs = startSecs + (elapsedSec - s.trimStart);
+                            
+                            if (!isGlobalTrim || (timelineSecs >= gStartSecs && timelineSecs <= gEndSecs)) {
+                                pool.push({
+                                    timelineSecs: timelineSecs,
+                                    source: s.title,
+                                    lux: p.lux
+                                });
+                            }
+                        }
+                    });
+                }
+            });
+
+            if (pool.length === 0) {
+                showToast("No data points aligned within crop parameters.", true);
+                return;
+            }
+
+            // Sort ascendingly
+            pool.sort((a, b) => a.timelineSecs - b.timelineSecs);
+            const minTimelineSecs = pool[0].timelineSecs;
+            
+            const excelRows = pool.map(item => {
+                const relativeTimeSecs = item.timelineSecs - minTimelineSecs;
+                
+                // Clock strings conversion
+                const totalSecs = Math.round(item.timelineSecs) % 86400;
+                const hrs = Math.floor(totalSecs / 3600);
+                const mins = Math.floor((totalSecs % 3600) / 60);
+                const secs = totalSecs % 60;
+                const ampm = hrs >= 12 ? 'PM' : 'AM';
+                let displayHrs = hrs % 12;
+                displayHrs = displayHrs ? displayHrs : 12;
+                const clockStr = `${displayHrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')} ${ampm}`;
+
+                return {
+                    "Timeline Time (s)": parseFloat(relativeTimeSecs.toFixed(3)),
+                    "Clock Time": clockStr,
+                    "Source Segment": item.source,
+                    "Luminance (Lv)": item.lux
+                };
+            });
+
+            const ws = XLSX.utils.json_to_sheet(excelRows);
+            ws["!cols"] = [{ wch: 18 }, { wch: 15 }, { wch: 25 }, { wch: 18 }];
+            
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Stitched Log");
+
+            let customTitle = (document.getElementById("edit-session-title")?.value || "").trim();
+            if (customTitle.length === 0) customTitle = "Stitched Telemetry Session";
+            const filename = sanitizeFilename(customTitle);
+
+            XLSX.writeFile(wb, `${filename}.xlsx`);
+            showToast("Export compiled to Excel successfully.");
+        }
+
+        // --- COMPILE AND SAVE MERGED STITCH TO NEW FIRBASE STUDIO DATABASE ---
+        function saveEditSessionToDb() {
+            if (editSessions.length === 0) {
+                showToast("Stitch timeline is empty.", true);
+                return;
+            }
+
+            const gTrimCheck = document.getElementById("edit-global-trim-check");
+            const isGlobalTrim = gTrimCheck ? gTrimCheck.checked : false;
+            
+            let gStartSecs = 0;
+            let gEndSecs = 86400;
+            
+            if (isGlobalTrim) {
+                const gh = document.getElementById("edit-global-start-h").value;
+                const gm = document.getElementById("edit-global-start-m").value;
+                const gs = document.getElementById("edit-global-start-s").value;
+                const gampm = document.getElementById("edit-global-start-ampm").value;
+                
+                const gEh = document.getElementById("edit-global-end-h").value;
+                const gEm = document.getElementById("edit-global-end-m").value;
+                const gEs = document.getElementById("edit-global-end-s").value;
+                const gEampm = document.getElementById("edit-global-end-ampm").value;
+                
+                gStartSecs = timeToSeconds(gh, gm, gs, gampm);
+                gEndSecs = timeToSeconds(gEh, gEm, gEs, gEampm);
+            }
+
+            const pool = [];
+            editSessions.forEach(s => {
+                const startSecs = timeToSeconds(s.startTime.h, s.startTime.m, s.startTime.s, s.startTime.ampm);
+                if (s.rawDatapoints && s.rawDatapoints.length > 0) {
+                    const baseTime = s.rawDatapoints[0].timeMillis;
+                    s.rawDatapoints.forEach(p => {
+                        const elapsedSec = (p.timeMillis - baseTime) / 1000.0;
+                        
+                        if (elapsedSec >= s.trimStart && elapsedSec <= (s.originalDurationSec - s.trimEnd)) {
+                            const timelineSecs = startSecs + (elapsedSec - s.trimStart);
+                            
+                            if (!isGlobalTrim || (timelineSecs >= gStartSecs && timelineSecs <= gEndSecs)) {
+                                pool.push({
+                                    timelineSecs: timelineSecs,
+                                    lux: p.lux
+                                });
+                            }
+                        }
+                    });
+                }
+            });
+
+            if (pool.length === 0) {
+                showToast("Stitch compiled fails: Empty data pool under crop conditions.", true);
+                return;
+            }
+
+            pool.sort((a, b) => a.timelineSecs - b.timelineSecs);
+            
+            const minTimelineSecs = pool[0].timelineSecs;
+            const maxTimelineSecs = pool[pool.length - 1].timelineSecs;
+            
+            let sum = 0;
+            let maxVal = pool[0].lux;
+            let minVal = pool[0].lux;
+            
+            const baseDate = new Date();
+            baseDate.setHours(0, 0, 0, 0); // midnight today
+            const minAbsoluteMillis = baseDate.getTime() + Math.round(minTimelineSecs * 1000);
+            
+            const mappedPoints = pool.map(pt => {
+                sum += pt.lux;
+                if (pt.lux > maxVal) maxVal = pt.lux;
+                if (pt.lux < minVal) minVal = pt.lux;
+                
+                const ptTimeMillis = minAbsoluteMillis + Math.round((pt.timelineSecs - minTimelineSecs) * 1000);
+                return {
+                    timeMillis: ptTimeMillis,
+                    lux: pt.lux
+                };
+            });
+
+            const avgVal = sum / pool.length;
+            let customTitle = (document.getElementById("edit-session-title")?.value || "").trim();
+            if (customTitle.length === 0) customTitle = "Stitched Telemetry Session";
+            
+            const newSessionId = "session_" + Date.now();
+            const newSession = {
+                id: Date.now(),
+                title: customTitle,
+                timestamp: minAbsoluteMillis,
+                durationMs: Math.round((maxTimelineSecs - minTimelineSecs) * 1000) || 1000,
+                avgLux: avgVal,
+                maxLux: maxVal,
+                minLux: minVal,
+                datapoints: mappedPoints
+            };
+
+            showToast("Publishing stitched telemetry curve...");
+            db.ref(`sessions/${newSessionId}`).set(newSession)
+                .then(() => {
+                    showToast(`Succeeded! Published: "${customTitle}"`);
+                    // Redirect back to viewer tab
+                    switchTab('data');
+                    viewStudioSession(newSession.id);
+                })
+                .catch(err => {
+                    console.error("Save edit matrix error:", err);
+                    showToast("Database fault: Failed to write stitched metrics.", true);
+                });
+        }
+
+
+        // ==========================================
+        //         TAB LAYER 3: MULTIVIEW ENGINE
+        // ==========================================
+
+        function renderMultiviewSidebar() {
+            const listContainer = document.getElementById("multiview-available-list");
+            if (!listContainer) return;
+            
+            const countBadge = document.getElementById("multiview-db-count");
+            const sessions = Object.entries(studioSessions).map(([key, value]) => {
+                const copy = { ...value };
+                copy.dbKey = key;
+                return copy;
+            });
+            if (countBadge) countBadge.innerText = `${sessions.length} records`;
+
+            if (sessions.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="text-center text-brand-subtle py-8 text-xs">
+                        <i class="fa-solid fa-cloud-arrow-down text-lg mb-1 opacity-60"></i>
+                        <p>No records synchronized</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const searchQuery = (document.getElementById("multiview-search-input")?.value || "").toLowerCase().trim();
+            const sortBy = document.getElementById("multiview-sort-select")?.value || "name-asc";
+            
+            const sorted = [...sessions];
+            if (sortBy === "time-desc") {
+                sorted.sort((a, b) => b.timestamp - a.timestamp);
+            } else if (sortBy === "time-asc") {
+                sorted.sort((a, b) => a.timestamp - b.timestamp);
+            } else if (sortBy === "name-asc") {
+                sorted.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+            } else if (sortBy === "name-desc") {
+                sorted.sort((a, b) => (b.title || "").localeCompare(a.title || ""));
+            }
+            
+            listContainer.innerHTML = "";
+            let matchCount = 0;
+
+            sorted.forEach(session => {
+                if (searchQuery && !session.title.toLowerCase().includes(searchQuery)) {
+                    return;
+                }
+                matchCount++;
+
+                const cleanId = session.dbKey.toString().replace('session_', '');
+
+                const isAdded = multiviewSelectedList.some(item => {
+                    const itemCleanId = item.id.toString().replace('session_', '');
+                    const sessCleanId = cleanId;
+                    return itemCleanId === sessCleanId;
+                });
+                const dateStr = new Date(session.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                const durationSec = (session.durationMs / 1000.0).toFixed(1);
+                 
+                const div = document.createElement("div");
+                div.className = `p-3 rounded-xl border border-gray-150 transition-all flex items-center justify-between cursor-pointer ${isAdded ? 'bg-brand-active border-emerald-300 shadow-xs' : 'bg-white hover:bg-slate-50'}`;
+                div.onclick = () => toggleMultiviewSession(cleanId);
+
+                div.innerHTML = `
+                    <div class="flex-1 min-w-0 pr-2">
+                        <div class="text-xs font-semibold text-brand-dark break-words pr-1 leading-normal mb-1" title="${session.title}">${session.title}</div>
+                        <div class="flex items-center gap-2 text-[10px] text-brand-subtle">
+                            <span>${dateStr}</span>
+                            <span class="w-1.5 h-1.5 rounded-full bg-slate-200"></span>
+                            <span>${durationSec}s</span>
+                        </div>
+                    </div>
+                    <button class="shrink-0 text-xs px-2.5 py-1.5 rounded-lg border transition-all ${isAdded ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-brand-dark border-gray-200 hover:bg-gray-55'}">
+                        <i class="fa-solid ${isAdded ? 'fa-check' : 'fa-plus'}"></i>
+                    </button>
+                `;
+                listContainer.appendChild(div);
+            });
+
+            if (matchCount === 0) {
+                listContainer.innerHTML = `
+                    <div class="text-center text-brand-subtle py-8 text-xs">
+                        <i class="fa-solid fa-magnifying-glass text-lg mb-1 opacity-60"></i>
+                        <p>No matching recordings</p>
+                    </div>
+                `;
+            }
+        }
+
+        function renderMultiviewActiveList() {
+            const activeContainer = document.getElementById("multiview-active-list");
+            if (!activeContainer) return;
+
+            const activeCountBadge = document.getElementById("multiview-active-count");
+            if (activeCountBadge) activeCountBadge.innerText = `${multiviewSelectedList.length} active`;
+
+            const emptyState = document.getElementById("multiview-empty-state");
+            if (emptyState) {
+                if (multiviewSelectedList.length === 0) {
+                    emptyState.classList.remove("hidden");
+                } else {
+                    emptyState.classList.add("hidden");
+                }
+            }
+
+            if (multiviewSelectedList.length === 0) {
+                activeContainer.innerHTML = `
+                    <div class="text-center text-brand-subtle py-8 text-xs">
+                        <i class="fa-solid fa-sliders text-lg mb-1 opacity-60"></i>
+                        <p>No lines plotted</p>
+                        <p class="text-[10px] mt-1 text-slate-400">Select recordings on the left sidebar</p>
+                    </div>
+                `;
+                return;
+            }
+
+            activeContainer.innerHTML = "";
+
+            multiviewSelectedList.forEach((item, idx) => {
+                const div = document.createElement("div");
+                div.className = "p-3 bg-slate-50 border border-slate-100 hover:border-slate-300 rounded-xl flex flex-col gap-2 relative transition-all duration-150 cursor-grab active:cursor-grabbing";
+                div.draggable = true;
+
+                // Bind drag events
+                div.addEventListener('dragstart', (e) => handleDragStart(e, idx));
+                div.addEventListener('dragover', (e) => handleDragOver(e, idx));
+                div.addEventListener('dragleave', (e) => handleDragLeave(e));
+                div.addEventListener('drop', (e) => handleDrop(e, idx));
+                div.addEventListener('dragend', (e) => handleDragEnd(e));
+
+                const isTopHalf = idx < (multiviewSelectedList.length / 2);
+                const positionClass = isTopHalf ? "top-full mt-1.5" : "bottom-full mb-1.5";
+                
+                div.innerHTML = `
+                    <div class="flex items-start justify-between gap-1" onclick="event.stopPropagation();">
+                        <span class="text-xs font-semibold text-brand-dark break-words pr-1 leading-normal" title="${item.title}">${item.title}</span>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <button onclick="removeSessionFromMultiview('${item.id}'); event.stopPropagation();" class="text-gray-400 hover:text-red-500 transition-colors text-[11px] p-0.5" title="Remove line">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center justify-between text-xs text-brand-subtle mt-1" onclick="event.stopPropagation();">
+                        <div class="flex items-center gap-1.5 bg-white border border-slate-150 rounded-lg px-2 py-1 text-slate-400 text-xs select-none" title="Drag to adjust order">
+                            <i class="fa-solid fa-grip-vertical text-slate-400 text-[10px]"></i>
+                            <span class="text-[10px] text-slate-500 font-medium font-sans">Drag layout</span>
+                        </div>
+                        
+                        <!-- Color button -->
+                        <div class="relative">
+                            <button onclick="toggleMultiviewColorDropdown('${item.id}', event);" class="flex items-center gap-1.5 bg-white border border-slate-200 hover:border-slate-300 rounded-lg px-2 py-1 text-[11px] font-normal transition-colors text-brand-dark">
+                                <span class="w-3 h-3 rounded-full border border-black/10 inline-block shrink-0" style="background-color: ${item.color}"></span>
+                                <span class="truncate max-w-[65px] text-[11px] font-medium text-brand-dark">${getColorName(item.color)}</span>
+                                <i class="fa-solid fa-chevron-down text-[9px] opacity-70"></i>
+                            </button>
+                            
+                            <!-- Absolute Color Selector Popover panel, hidden by default. Elevated z-index to 50 when parent card has appropriate layout -->
+                            <div id="color-picker-${item.id}" class="absolute right-0 ${positionClass} z-[9999] hidden bg-white border border-slate-200 rounded-2xl shadow-xl p-3 w-56 grid grid-cols-5 gap-1.5">
+                                <!-- Swatches loaded dynamically below -->
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                activeContainer.appendChild(div);
+
+                const picker = document.getElementById(`color-picker-${item.id}`);
+                if (picker) {
+                    M365_COLORS.forEach(col => {
+                        const swatchBtn = document.createElement("button");
+                        swatchBtn.type = "button";
+                        swatchBtn.className = "w-7 h-7 rounded-lg border border-black/5 hover:scale-110 active:scale-95 transition-all text-center flex items-center justify-center shrink-0 shadow-xs relative group";
+                        swatchBtn.style.backgroundColor = col.hex;
+                        swatchBtn.title = col.name;
+                        swatchBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            selectMultiviewColor(item.id, col.hex);
+                        };
+                        
+                        if (col.hex.toLowerCase() === item.color.toLowerCase()) {
+                            swatchBtn.innerHTML = `<i class="fa-solid fa-check text-[10px] text-white" style="text-shadow: 1px 1px 2px rgba(0,0,0,0.6)"></i>`;
+                        }
+                        
+                        picker.appendChild(swatchBtn);
+                    });
+                }
+            });
+        }
+
+        // --- MULTIVIEW DRAG & DROP REORDERING ---
+        let dragSourceIdx = null;
+
+        function handleDragStart(event, idx) {
+            dragSourceIdx = idx;
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', idx);
+            event.currentTarget.classList.add('opacity-40', 'border-emerald-500');
+        }
+
+        function handleDragOver(event, idx) {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+            event.currentTarget.classList.add('border-emerald-450', 'bg-emerald-50/10');
+        }
+
+        function handleDragLeave(event) {
+            event.currentTarget.classList.remove('border-emerald-450', 'bg-emerald-50/10');
+        }
+
+        function handleDrop(event, targetIdx) {
+            event.preventDefault();
+            event.currentTarget.classList.remove('border-emerald-450', 'bg-emerald-50/10');
+
+            if (dragSourceIdx !== null && dragSourceIdx !== targetIdx) {
+                const draggedItem = multiviewSelectedList[dragSourceIdx];
+                multiviewSelectedList.splice(dragSourceIdx, 1);
+                multiviewSelectedList.splice(targetIdx, 0, draggedItem);
+                
+                renderMultiviewActiveList();
+                updateMultiviewChart();
+            }
+        }
+
+        function handleDragEnd(event) {
+            event.currentTarget.classList.remove('opacity-40', 'border-emerald-500');
+            dragSourceIdx = null;
+        }
+
+        // --- TOGGLE / REMOVE SESSIONS IN MULTIVIEW ---
+        function toggleMultiviewSession(id) {
+            const cleanId = id.toString().replace('session_', '');
+            
+            const existsIdx = multiviewSelectedList.findIndex(item => item.id.toString().replace('session_', '') === cleanId);
+            if (existsIdx > -1) {
+                multiviewSelectedList.splice(existsIdx, 1);
+                showToast("Removed line from Multiview comparison.");
+            } else {
+                if (multiviewSelectedList.length >= 20) {
+                    showToast("Maximum of 20 aligned comparison curves reached.", true);
+                    return;
+                }
+
+                const session = studioSessions[`session_${cleanId}`] || studioSessions[cleanId];
+                if (!session) {
+                    showToast(`Session not found in sandbox database.`, true);
+                    return;
+                }
+                const rawPoints = session.datapoints ? Object.values(session.datapoints) : [];
+                const sorted = rawPoints.sort((a,b) => a.timeMillis - b.timeMillis);
+                if (sorted.length === 0) {
+                    showToast("Cannot add empty session.", true);
+                    return;
+                }
+                
+                const baseTime = sorted[0].timeMillis;
+                const pointsMapped = sorted.map(p => ({
+                    t: parseFloat(((p.timeMillis - baseTime) / 1000.0).toFixed(3)),
+                    lux: p.lux
+                }));
+                
+                const usedColors = new Set(multiviewSelectedList.map(item => item.color));
+                let chosenColor = M365_COLORS[0].hex;
+                for (let col of M365_COLORS) {
+                    if (!usedColors.has(col.hex)) {
+                        chosenColor = col.hex;
+                        break;
+                    }
+                }
+                if (usedColors.has(chosenColor)) {
+                    chosenColor = M365_COLORS[multiviewSelectedList.length % M365_COLORS.length].hex;
+                }
+
+                multiviewSelectedList.push({
+                    id: cleanId,
+                    title: session.title,
+                    color: chosenColor,
+                    datapoints: pointsMapped,
+                    rawDatapoints: sorted
+                });
+                showToast(`Added to comparison overlay: "${session.title}"`);
+            }
+            
+            renderMultiviewSidebar();
+            renderMultiviewActiveList();
+            updateMultiviewChart();
+        }
+
+        function removeSessionFromMultiview(id) {
+            const cleanId = id.toString().replace('session_', '');
+            multiviewSelectedList = multiviewSelectedList.filter(item => item.id.toString().replace('session_', '') !== cleanId);
+            
+            showToast("Line removed.");
+            renderMultiviewSidebar();
+            renderMultiviewActiveList();
+            updateMultiviewChart();
+        }
+
+        function selectMultiviewColor(id, hexColor) {
+            const cleanId = id.toString().replace('session_', '');
+            const item = multiviewSelectedList.find(item => item.id.toString().replace('session_', '') === cleanId);
+            if (item) {
+                item.color = hexColor;
+                renderMultiviewActiveList();
+                updateMultiviewChart();
+            }
+        }
+
+        // --- BUG FIX: COLOR SELECTOR STACKING ORDER ELEVATION ---
+        function toggleMultiviewColorDropdown(id, event) {
+            if (event) event.stopPropagation();
+            
+            document.querySelectorAll('[id^="color-picker-"]').forEach(p => {
+                if (p.id !== `color-picker-${id}`) {
+                    p.classList.add("hidden");
+                    p.closest('.bg-slate-50')?.classList.remove('z-50');
+                }
+            });
+
+            const picker = document.getElementById(`color-picker-${id}`);
+            if (picker) {
+                picker.classList.toggle("hidden");
+                const card = picker.closest('.bg-slate-50');
+                if (card) {
+                    if (picker.classList.contains("hidden")) {
+                        card.classList.remove("z-50");
+                    } else {
+                        card.classList.add("z-50");
+                    }
+                }
+            }
+        }
+
+        document.addEventListener('click', function(event) {
+            if (!event.target.closest('[id^="color-picker-"]') && !event.target.closest('button')) {
+                document.querySelectorAll('[id^="color-picker-"]').forEach(p => {
+                    p.classList.add("hidden");
+                    p.closest('.bg-slate-50')?.classList.remove('z-50');
+                });
+            }
+        });
+
+        function clearMultiviewAll() {
+            multiviewSelectedList = [];
+            const customInput = document.getElementById("multiview-filename-input");
+            if (customInput) customInput.value = "";
+            showToast("Multiview comparison list cleared.");
+            renderMultiviewSidebar();
+            renderMultiviewActiveList();
+            updateMultiviewChart();
+        }
+
+        // --- MULTIVIEW CHART RENDER ENGINE ---
+        function updateMultiviewChart() {
+            if (multiviewSelectedList.length === 0) {
+                if (multiviewChartInstance) {
+                    multiviewChartInstance.destroy();
+                    multiviewChartInstance = null;
+                }
+                return;
+            }
+
+            const ctx = document.getElementById("multiview-chart").getContext("2d");
+            
+            const datasets = multiviewSelectedList.map(item => {
+                const data = item.datapoints.map(p => ({
+                    x: p.t,
+                    y: p.lux
+                }));
+
+                return {
+                    label: item.title,
+                    data: data,
+                    borderColor: item.color,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    pointRadius: 1,
+                    pointHoverRadius: 5,
+                    pointBackgroundColor: item.color,
+                    fill: false,
+                    tension: 0.1
+                };
+            });
+
+            if (multiviewChartInstance) {
+                multiviewChartInstance.destroy();
+            }
+
+            multiviewChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: { datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    interaction: {
+                        intersect: false,
+                        mode: 'nearest',
+                        axis: 'x'
+                    },
+                    scales: {
+                        x: {
+                            type: "linear",
+                            ticks: { color: "#64748B" },
+                            title: {
+                                display: true,
+                                text: 'Time (s)',
+                                color: "#64748B",
+                                font: { size: 11, weight: 'medium' }
+                            }
+                        },
+                        y: {
+                            ticks: { color: "#64748B" },
+                            title: {
+                                display: true,
+                                text: 'Luminance (Lv)',
+                                color: "#64748B",
+                                font: { size: 11, weight: 'medium' }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                color: '#334155',
+                                font: { size: 11, family: 'Instrument Sans' }
+                            }
+                        },
+                        tooltip: {
+                            enabled: true,
+                            backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                            titleColor: '#ffffff',
+                            bodyColor: '#38bdf8',
+                            borderColor: '#334155',
+                            borderWidth: 1,
+                            padding: 10,
+                            displayColors: true,
+                            callbacks: {
+                                title: function(context) {
+                                    return `Time: ${context[0].parsed.x.toFixed(2)}s`;
+                                },
+                                label: function(context) {
+                                    return `${context.dataset.label}: ${context.parsed.y.toFixed(3)} Lv`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // --- MULTIVIEW ALIGNED MULTI-LINE SPREADSHEET EXPORT ---
+        function exportMultiviewExcel() {
+            if (multiviewSelectedList.length === 0) {
+                showToast("Cannot export empty Multiview overlay dataset.", true);
+                return;
+            }
+
+            // Find maximum duration to align timeline grid rows
+            let maxOverallT = 0;
+            multiviewSelectedList.forEach(item => {
+                if (item.datapoints.length > 0) {
+                    const lastT = item.datapoints[item.datapoints.length - 1].t;
+                    if (lastT > maxOverallT) maxOverallT = lastT;
+                }
+            });
+
+            if (maxOverallT <= 0) {
+                showToast("All channels have null measurements.", true);
+                return;
+            }
+
+            // Sample interval alignment at 0.05 second intervals
+            const step = 0.05;
+            const totalSteps = Math.min(Math.round(maxOverallT / step), 12000); 
+
+            const excelRows = [];
+            for (let i = 0; i <= totalSteps; i++) {
+                const currentT = parseFloat((i * step).toFixed(2));
+                const row = { "t": currentT };
+                
+                multiviewSelectedList.forEach(item => {
+                    row[item.title] = interpolateLuxAtT(item.datapoints, currentT);
+                });
+                
+                excelRows.push(row);
+            }
+
+            const ws = XLSX.utils.json_to_sheet(excelRows);
+            applyXlsxFormatting(ws);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Combined Telemetry Sync");
+
+            const stamp = new Date().toISOString().slice(0, 10);
+            const defaultName = `multiview_sync_${stamp}`;
+            const customInput = document.getElementById("multiview-filename-input");
+            let filename = defaultName;
+            if (customInput && customInput.value.trim().length > 0) {
+                filename = sanitizeFilename(customInput.value.trim());
+            }
+            XLSX.writeFile(wb, `${filename}.xlsx`);
+            showToast("Excel spreadsheet generated successfully.");
+        }
+
+        function interpolateLuxAtT(points, targetT) {
+            if (!points || points.length === 0) return null;
+            if (targetT <= points[0].t) return parseFloat(points[0].lux.toFixed(3));
+            if (targetT > points[points.length - 1].t) return 0;
+            if (targetT === points[points.length - 1].t) return parseFloat(points[points.length - 1].lux.toFixed(3));
+
+            for (let i = 0; i < points.length - 1; i++) {
+                const pA = points[i];
+                const pB = points[i+1];
+                if (targetT >= pA.t && targetT <= pB.t) {
+                    const ratio = (targetT - pA.t) / (pB.t - pA.t);
+                    const interpolatedValue = pA.lux + ratio * (pB.lux - pA.lux);
+                    return parseFloat(interpolatedValue.toFixed(3));
+                }
+            }
+            return null;
+        }
+
+        // --- DOWNLOAD AS JPEG ---
+        function downloadMultiviewJpg() {
+            if (multiviewSelectedList.length === 0) {
+                showToast("No active chart to download.", true);
+                return;
+            }
+
+            const canvas = document.getElementById("multiview-chart");
+            if (!canvas) return;
+
+            // Generate image file locally
+            const imageURI = canvas.toDataURL("image/jpeg", 0.95);
+            const link = document.createElement("a");
+            
+            const stamp = new Date().toISOString().slice(0, 10);
+            let filename = `multiview_chart_${stamp}.jpg`;
+            const customInput = document.getElementById("multiview-filename-input");
+            if (customInput && customInput.value.trim().length > 0) {
+                filename = `${sanitizeFilename(customInput.value.trim())}.jpg`;
+            }
+
+            link.download = filename;
+            link.href = imageURI;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast("Comparison chart JPG downloaded successfully.");
+        }
+
+    </script>
+</body>
+</html>

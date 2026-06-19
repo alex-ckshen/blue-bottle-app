@@ -1,0 +1,6 @@
+{
+  "name": "藍瓶實驗",
+  "description": "A light meter using the device's main camera. Estimates lux from camera exposure.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

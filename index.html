@@ -1,0 +1,2608 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>藍瓶實驗 - Luminance Research Console</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ["Instrument Sans", "Inter", "sans-serif"]
+                    },
+                    colors: {
+                        "brand-sidebar": "#F0FAF6",
+                        "brand-active": "#D9F2E7",
+                        "brand-dark": "#1E293B",
+                        "brand-text": "#334155",
+                        "brand-subtle": "#64748B"
+                    }
+                }
+            }
+        };
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Instrument Sans', sans-serif !important;
+            -webkit-font-smoothing: antialiased;
+        }
+        ::-webkit-scrollbar {
+            display: none;
+        }
+        html, body {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+            height: 100%;
+        }
+        .transition-all, .view-panel, .nav-item, .animate-pulse, .animate-ping, canvas, .chart-container {
+            transform: translateZ(0);
+            backface-visibility: hidden;
+            perspective: 1000px;
+            will-change: transform, opacity;
+        }
+        .nav-item {
+            transform: translateZ(0);
+            backface-visibility: hidden;
+            will-change: transform;
+        }
+    </style>
+</head>
+<body class="text-brand-text flex flex-col h-screen overflow-hidden">
+
+    <!-- Floating Web Pull-to-Refresh Indicator -->
+    <div id="pull-refresh-indicator" class="fixed top-16 left-1/2 -translate-x-1/2 z-[9999] pointer-events-none transform -translate-y-20 opacity-0 transition-all duration-300 ease-out bg-white text-emerald-600 w-10 h-10 rounded-full shadow-lg flex items-center justify-center border border-gray-150">
+        <i class="fa-solid fa-arrows-rotate text-sm" id="pull-refresh-spinner"></i>
+    </div>
+
+    <div id="recording-saved-popup" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-[9999] hidden transform transition-all duration-300 translate-y-10 opacity-0 bg-emerald-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-4 text-xs">
+        <div class="flex items-center gap-2">
+            <i class="fa-solid fa-circle-check text-emerald-400"></i>
+            <span>Recording saved</span>
+        </div>
+        <button id="popup-view-btn" class="bg-white/20 hover:bg-white/30 text-white px-3 py-1 rounded-lg text-[11px] transition-colors">
+            View
+        </button>
+    </div>
+
+    <div id="confirm-modal" onclick="if (event.target === this) closeConfirmModal()" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div class="flex items-center gap-3 text-red-600 mb-3">
+                <i class="fa-solid fa-circle-exclamation text-2xl"></i>
+                <h3 class="text-lg font-normal" id="confirm-title">Are you sure?</h3>
+            </div>
+            <p class="text-brand-text text-sm mb-6" id="confirm-desc"></p>
+            <div class="flex justify-end gap-3">
+                <button onclick="closeConfirmModal()" class="bg-gray-100 hover:bg-gray-200 text-brand-dark px-4 py-2 rounded-xl text-sm transition-colors">
+                    Cancel
+                </button>
+                <button id="confirm-action-btn" class="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl text-sm transition-colors">
+                    Confirm
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="rename-modal" onclick="if (event.target === this) closeRenameModal()" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div class="flex items-center gap-3 text-brand-dark mb-4">
+                <i class="fa-solid fa-pen-to-square text-xl text-emerald-600"></i>
+                <h3 class="text-lg font-normal">Rename Session</h3>
+            </div>
+            <div class="mb-6">
+                <label for="rename-input" class="block text-xs text-brand-subtle mb-2">New session title</label>
+                <input type="text" id="rename-input" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-brand-dark text-sm">
+            </div>
+            <div class="flex justify-end gap-3">
+                <button onclick="closeRenameModal()" class="bg-gray-100 hover:bg-gray-200 text-brand-dark px-4 py-2 rounded-xl text-sm transition-colors">
+                    Cancel
+                </button>
+                <button id="rename-action-btn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-sm transition-colors">
+                    Save Changes
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <header class="bg-brand-sidebar border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-3">
+            <svg class="w-8 h-8" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M21.5 35 L42.5 35 L49 48 C51 52 48 56 43 56 L21 56 C16 56 13 52 15 48 Z" fill="#3B82F6"/>
+                <circle cx="28" cy="45" r="2" fill="#93C5FD" />
+                <circle cx="38" cy="48" r="1.5" fill="#93C5FD" />
+                <path d="M26 8h12v10L52 48c2 4-1 8-6 8H18c-5 0-8-4-6-8L26 18V8z" stroke="#1E293B" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+                <path d="M24 8h16" stroke="#1E293B" stroke-width="4" stroke-linecap="round"/>
+            </svg>
+            <div>
+                <h1 class="text-lg font-normal text-brand-dark leading-none">藍瓶實驗</h1>
+            </div>
+        </div>
+
+        <nav class="flex items-center gap-1.5 bg-white p-1.5 rounded-xl border border-gray-150 shadow-sm">
+            <span onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-item flex items-center gap-2 px-5 py-2.5 text-sm text-brand-dark bg-brand-active rounded-lg cursor-pointer transition-all shadow-xs font-normal">
+                <i class="fa-solid fa-chart-line text-sm"></i>
+                <span>live data</span>
+            </span>
+            <span onclick="switchTab('history')" id="nav-history" class="nav-item flex items-center gap-2 px-5 py-2.5 text-sm text-brand-text rounded-lg hover:bg-brand-active cursor-pointer transition-all font-normal">
+                <i class="fa-solid fa-clock-rotate-left text-sm"></i>
+                <span>history</span>
+            </span>
+            <span onclick="switchTab('multiview')" id="nav-multiview" class="nav-item flex items-center gap-2 px-5 py-2.5 text-sm text-brand-text rounded-lg hover:bg-brand-active cursor-pointer transition-all font-normal">
+                <i class="fa-solid fa-layer-group text-sm"></i>
+                <span>multiview</span>
+            </span>
+            <span onclick="switchTab('naming')" id="nav-naming" class="nav-item flex items-center gap-2 px-5 py-2.5 text-sm text-brand-text rounded-lg hover:bg-brand-active cursor-pointer transition-all font-normal">
+                <i class="fa-solid fa-pen-to-square text-sm"></i>
+                <span>naming</span>
+            </span>
+            <span onclick="switchTab('consoles')" id="nav-consoles" class="nav-item flex items-center gap-2 px-5 py-2.5 text-sm text-brand-text rounded-lg hover:bg-brand-active cursor-pointer transition-all font-normal">
+                <i class="fa-solid fa-terminal text-sm"></i>
+                <span>console</span>
+            </span>
+        </nav>
+
+        <div class="flex items-center gap-2">
+            <button onclick="recheckFirebaseWeb()" class="text-xs bg-white text-brand-dark hover:bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 shadow-xs">
+                <i class="fa-solid fa-arrows-rotate mr-0.5" id="web-refresh-icon"></i>
+                <span class="hidden sm:inline">Refresh Sync</span>
+            </button>
+            <div id="status-badge" class="flex items-center"></div>
+        </div>
+    </header>
+
+    <main id="main-content" class="flex-1 bg-white flex flex-col h-[calc(100vh-60px)] overflow-hidden">
+
+        <div id="view-dashboard" class="view-panel p-4 sm:p-6 flex-1 flex flex-col overflow-hidden">
+            
+            <div class="flex-1 min-h-0 bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-col">
+                <div class="flex-1 min-h-0 w-full relative">
+                    <canvas id="live-chart" class="w-full h-full"></canvas>
+                </div>
+            </div>
+
+            <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm mt-4 shrink-0 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div class="flex items-center gap-3 w-full sm:w-auto">
+                    <button id="recording-toggle-btn" onclick="toggleRecording()" disabled class="flex-1 sm:flex-initial py-2.5 px-5 rounded-xl text-xs text-white bg-slate-200 cursor-not-allowed transition-all shadow flex items-center justify-center gap-1.5 font-normal whitespace-nowrap">
+                        <i id="record-btn-icon" class="fa-solid fa-play text-[10px]"></i>
+                        <span id="record-btn-text">Start</span>
+                    </button>
+                    <button onclick="eraseCurrentLiveData()" class="flex-1 sm:flex-initial text-red-600 border border-red-200 py-2.5 px-5 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 font-normal whitespace-nowrap">
+                        <i class="fa-solid fa-trash-can"></i>
+                        <span>Clear</span>
+                    </button>
+                </div>
+                <div class="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
+                    <span class="text-xs text-brand-subtle uppercase tracking-wider whitespace-nowrap">session</span>
+                    <div class="flex items-center gap-1.5 w-48 relative" id="custom-dropdown-container">
+                        <div id="naming-experiment-dropdown-custom" class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50/50 text-brand-dark text-[11px] flex items-center justify-between cursor-pointer hover:border-emerald-400 transition-all">
+                            <span id="selected-type-display">Select Type</span>
+                            <i class="fa-solid fa-chevron-down text-[10px]"></i>
+                        </div>
+                        <div id="dropdown-options" class="absolute bottom-full left-0 w-full mb-1 bg-white border border-gray-200 rounded-xl shadow-xl z-[100] hidden overflow-hidden">
+                            <!-- Options -->
+                        </div>
+                        <button onclick="switchTab('naming')" class="p-2 text-gray-400 hover:text-emerald-600 transition-colors" title="Manage experiment types">
+                             <i class="fa-solid fa-pen-to-square text-lg"></i>
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-0.5 bg-gray-100 p-0.5 rounded-xl border border-gray-200" id="naming-trial-buttons">
+                        <button onclick="namingTrialSelected('1')" id="btn-trial-1" class="px-3.5 py-2 rounded-lg text-sm transition-colors hover:bg-gray-200 text-brand-text">1</button>
+                        <button onclick="namingTrialSelected('2')" id="btn-trial-2" class="px-3.5 py-2 rounded-lg text-sm transition-colors hover:bg-gray-200 text-brand-text">2</button>
+                        <button onclick="namingTrialSelected('3')" id="btn-trial-3" class="px-3.5 py-2 rounded-lg text-sm transition-colors hover:bg-gray-200 text-brand-text">3</button>
+                        <button onclick="namingTrialSelected('4')" id="btn-trial-4" class="px-3.5 py-2 rounded-lg text-sm transition-colors hover:bg-gray-200 text-brand-text">4</button>
+                        <button onclick="namingTrialSelected('5')" id="btn-trial-5" class="px-3.5 py-2 rounded-lg text-sm transition-colors hover:bg-gray-200 text-brand-text">5</button>
+                        <div class="h-6 w-px bg-gray-300 mx-1"></div>
+                        <input type="text" id="inline-trial-input" placeholder="..." class="w-16 h-9 px-2 bg-transparent text-sm text-center outline-none focus:bg-white/50 transition-colors rounded-lg" oninput="namingTrialSelected(this.value)">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-history" class="view-panel p-4 sm:p-6 flex-1 hidden flex flex-col h-full overflow-hidden">
+            <div id="history-list-view" class="flex-1 flex flex-col min-h-0">
+                <div class="mb-4 flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-gray-100 pb-3 shrink-0">
+                    <div>
+                        <h2 class="text-xl text-brand-dark font-normal">Synced Historical Sessions</h2>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button id="batch-multiview-btn" onclick="addSelectedToMultiview()" disabled class="text-xs bg-blue-100 text-blue-700 px-3 py-2 rounded-xl transition-colors cursor-not-allowed opacity-60 flex items-center gap-1">
+                            <i class="fa-solid fa-layer-group"></i> Move Checked to Multiview (<span id="selected-count-multiview">0</span>)
+                        </button>
+                        <button id="batch-download-btn" onclick="downloadSelectedSessions()" disabled class="text-xs bg-emerald-100 text-emerald-700 px-3 py-2 rounded-xl transition-colors cursor-not-allowed opacity-60 flex items-center gap-1">
+                            <i class="fa-solid fa-file-export"></i> Download Checked (<span id="selected-count-download">0</span>)
+                        </button>
+                        <button id="batch-delete-btn" onclick="deleteSelectedSessions()" disabled class="text-xs bg-red-100 text-red-700 px-3 py-2 rounded-xl transition-colors cursor-not-allowed opacity-60 flex items-center gap-1">
+                            <i class="fa-solid fa-trash-can"></i> Delete Checked (<span id="selected-count-delete">0</span>)
+                        </button>
+                        <button onclick="promptDeleteAllSessionsSoft()" class="text-xs bg-gray-100 hover:bg-gray-200 text-brand-dark px-3 py-2 rounded-xl transition-colors flex items-center gap-1">
+                            <i class="fa-solid fa-box-archive"></i> Recycle All
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex-1 overflow-y-auto bg-white rounded-2xl border border-gray-200 shadow-sm min-h-0">
+                    <div class="overflow-x-auto">
+                        <table class="w-full border-collapse text-left text-xs">
+                            <thead>
+                                <tr class="bg-gray-50 border-b border-gray-200 text-brand-subtle uppercase tracking-wider text-[10px] select-none">
+                                    <th class="px-4 py-3 w-10 text-center">
+                                        <input type="checkbox" id="select-all-sessions" onchange="toggleSelectAll(this)" class="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer">
+                                    </th>
+                                    <th class="px-6 py-3 font-normal">Session Title</th>
+                                    <th class="px-6 py-3 font-normal">Duration</th>
+                                    <th class="px-6 py-3 font-normal">Measured Range</th>
+                                    <th class="px-6 py-3 text-right font-normal">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 text-brand-dark" id="sessions-tbody">
+                                <tr id="no-sessions-row">
+                                    <td colspan="5" class="text-center text-brand-subtle py-8 px-6">
+                                        <div class="max-w-md mx-auto">
+                                            <i class="fa-solid fa-box-open text-2xl text-gray-300 mb-2"></i>
+                                            <p class="text-xs text-brand-dark mb-1 font-normal">No historical sessions recorded</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="history-detail-view" class="hidden flex-1 flex flex-col min-h-0 bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 shadow-sm">
+                <div class="flex items-center justify-between border-b border-gray-100 pb-3 shrink-0">
+                    <div class="flex items-center gap-3">
+                        <h2 class="text-base sm:text-lg text-brand-dark truncate max-w-xs sm:max-w-md font-normal cursor-pointer hover:text-emerald-600 transition-colors" id="history-detail-title" onclick="renameActiveSession()" title="Click to rename">Session Chart</h2>
+                        <button onclick="renameActiveSession()" class="text-gray-400 hover:text-brand-dark transition-colors"><i class="fa-solid fa-pen-to-square text-sm"></i></button>
+                    </div>
+                    <div>
+                        <button id="history-detail-download-btn" class="text-xs px-3 py-2 bg-emerald-800 text-white hover:bg-emerald-950 rounded-xl transition-colors flex items-center gap-1">
+                            <i class="fa-solid fa-file-export"></i> Download Excel
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex-1 min-h-0 w-full relative mt-4">
+                    <canvas id="history-chart" class="w-full h-full"></canvas>
+                </div>
+
+                <div class="grid grid-cols-3 gap-4 mt-4 bg-brand-sidebar border border-gray-100 p-4 rounded-xl shrink-0">
+                    <div>
+                        <span class="block text-[10px] text-brand-subtle uppercase tracking-wider mb-1 select-none">Duration</span>
+                        <span id="history-detail-duration" class="text-sm text-brand-dark font-mono font-normal">-</span>
+                    </div>
+                    <div>
+                        <span class="block text-[10px] text-brand-subtle uppercase tracking-wider mb-1 select-none">Average Luminance</span>
+                        <span id="history-detail-avg" class="text-sm text-emerald-600 font-mono font-normal">-</span>
+                    </div>
+                    <div>
+                        <span class="block text-[10px] text-brand-subtle uppercase tracking-wider mb-1 select-none">Peak Luminance</span>
+                        <span id="history-detail-max" class="text-sm text-emerald-800 font-mono font-normal">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MULTIVIEW TAB PANEL -->
+        <div id="view-multiview" class="view-panel hidden p-4 sm:p-6 flex-1 flex-row overflow-hidden gap-4 h-full bg-slate-50">
+            <!-- LEFT SIDEBAR: Available Recordings -->
+            <div class="w-80 bg-white flex flex-col border border-gray-200 rounded-2xl p-4 shadow-sm h-full overflow-hidden shrink-0">
+                <div class="flex items-center justify-between mb-3 shrink-0">
+                    <h2 class="text-sm font-semibold text-brand-dark flex items-center gap-2">
+                        <i class="fa-solid fa-list-check text-emerald-600"></i>
+                        <span>Database Records</span>
+                    </h2>
+                    <span id="multiview-db-count" class="text-[10px] bg-slate-100 px-2 py-0.5 rounded-full font-mono text-brand-subtle">0 found</span>
+                </div>
+                
+                <!-- Search bar inside the left sidebar -->
+                <div class="relative mb-3 shrink-0">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-brand-subtle"></i>
+                    <input type="text" id="multiview-search-input" oninput="renderMultiviewSidebar()" placeholder="Search recordings..." class="w-full text-xs pl-8 pr-3 py-2 bg-slate-50 border border-slate-150 rounded-xl focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-brand-dark">
+                </div>
+
+                <!-- Scrollable list of available recordings -->
+                <div class="flex-1 overflow-y-auto pr-1 space-y-2" id="multiview-available-list">
+                    <!-- Dynamic available session cards -->
+                </div>
+            </div>
+
+            <!-- CENTER PANEL: Single Large Multi-Dataset Chart -->
+            <div class="flex-1 bg-white flex flex-col border border-gray-200 rounded-2xl p-4 shadow-sm h-full overflow-hidden">
+                <!-- Top controls bar -->
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-gray-100 shrink-0">
+                    <div class="flex flex-col">
+                        <span class="text-xs font-semibold text-brand-dark">Multiview Data Visualizer</span>
+                        <span class="text-[10px] text-brand-subtle">Plot up to 20 recorded telemetry sessions side-by-side</span>
+                    </div>
+                    
+                    <div class="flex items-center gap-2">
+                        <!-- Custom filename input -->
+                        <input type="text" id="multiview-filename-input" placeholder="Custom filename (optional)..." class="text-xs px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-brand-dark w-44" />
+                        <!-- Export Excel -->
+                        <button onclick="exportMultiviewExcel()" class="text-xs font-normal text-brand-dark bg-white border border-gray-200 hover:bg-gray-50 px-3 py-2 rounded-xl flex items-center gap-1.5 transition-colors shadow-xs">
+                            <i class="fa-solid fa-file-excel text-excel-color text-emerald-600 text-sm"></i>
+                            <span>Export Excel</span>
+                        </button>
+                        <!-- Download as JPG -->
+                        <button onclick="downloadMultiviewJpg()" class="text-xs font-normal text-brand-dark bg-white border border-gray-200 hover:bg-gray-50 px-3 py-2 rounded-xl flex items-center gap-1.5 transition-colors shadow-xs">
+                            <i class="fa-solid fa-file-image text-blue-600 text-sm"></i>
+                            <span>Download JPG</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Canvas Container -->
+                <div class="flex-1 relative mt-4 min-h-0 min-w-0 flex items-center justify-center">
+                    <!-- Message when no sessions are selected -->
+                    <div id="multiview-empty-state" class="absolute inset-0 flex flex-col items-center justify-center bg-white z-10 p-6 text-center">
+                        <div class="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mb-3">
+                            <i class="fa-solid fa-layer-group text-2xl"></i>
+                        </div>
+                        <h3 class="text-sm font-semibold text-brand-dark mb-1">No recordings plotted</h3>
+                        <p class="text-xs text-brand-subtle max-w-xs">Select recordings from the left sidebar to overlay them on the single large multi-dataset chart.</p>
+                    </div>
+                    <canvas id="multiview-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- RIGHT SIDEBAR: Plotted / Active Sequence Management -->
+            <div class="w-80 bg-white flex flex-col border border-gray-200 rounded-2xl p-4 shadow-sm h-full overflow-hidden shrink-0">
+                <div class="flex items-center justify-between mb-3 shrink-0">
+                    <h2 class="text-sm font-semibold text-brand-dark flex items-center gap-2">
+                        <i class="fa-solid fa-sliders text-blue-600"></i>
+                        <span>Plotted Line Styles</span>
+                    </h2>
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="clearMultiviewAll()" class="text-[10px] bg-red-50 hover:bg-red-100 text-red-600 px-2 py-1 rounded-md transition-all font-medium" title="Clear all plotted lines">
+                            <i class="fa-solid fa-eraser"></i> Clear
+                        </button>
+                        <span id="multiview-active-count" class="text-[10px] bg-blue-50 px-2 py-0.5 rounded-full font-mono text-blue-600">0 active</span>
+                    </div>
+                </div>
+
+                <!-- Scrollable list of active plotted streams -->
+                <div class="flex-1 overflow-y-auto pr-1 space-y-3" id="multiview-active-list">
+                    <!-- Dynamic active card elements -->
+                </div>
+            </div>
+        </div>
+
+        <div id="view-naming" class="view-panel p-4 sm:p-6 flex-1 hidden overflow-y-auto w-full lg:w-3/4 max-w-4xl mx-auto flex-col">
+            <h2 class="text-xl text-brand-dark font-normal mb-6 leading-tight">Experiment Types Configuration</h2>
+            <div class="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm mb-6 relative hover:shadow-md transition-shadow">
+                <h3 class="text-brand-dark font-medium mb-4 text-sm">Add New</h3>
+                <div class="flex gap-2">
+                    <input type="text" id="new-experiment-type-input" onkeyup="if(event.key==='Enter') addExperimentType()" placeholder="Desired type..." class="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-sm text-brand-dark">
+                    <button onclick="addExperimentType()" class="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm transition-colors shadow-sm flex items-center gap-2 font-medium">
+                        <i class="fa-solid fa-plus text-xs"></i> <span class="hidden sm:inline">Add</span>
+                    </button>
+                </div>
+            </div>
+            
+            <h3 class="text-brand-dark font-medium mb-3 text-sm px-2">Available Experiment Types</h3>
+            <div id="experiment-types-list" class="flex flex-col gap-2">
+                <!-- Added dynamically -->
+            </div>
+        </div>
+
+        <div id="view-consoles" class="view-panel p-4 sm:p-6 flex-1 hidden overflow-hidden flex flex-col h-full">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full min-h-0">
+                <div class="flex flex-col h-full min-h-0">
+                    <div class="mb-4 flex justify-between items-center shrink-0">
+                        <h2 class="text-xl text-brand-dark font-normal">Diagnostic Console Logs</h2>
+                        <button onclick="clearLogs()" class="text-xs bg-gray-100 hover:bg-gray-200 text-brand-dark px-3 py-2 rounded-xl transition-colors">
+                            <i class="fa-solid fa-eraser mr-1"></i> Clear console
+                        </button>
+                    </div>
+                    <div class="bg-slate-900 border border-slate-950 rounded-2xl shadow-xl overflow-hidden font-mono flex flex-col flex-1 min-h-0">
+                        <div class="bg-slate-950 px-6 py-2.5 flex items-center justify-between border-b border-slate-800 text-xs text-brand-subtle shrink-0">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-red-500"></span>
+                                <span class="w-2 h-2 rounded-full bg-yellow-500"></span>
+                                <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                                <span class="ml-2 font-normal">console@blue-bottle-experiment</span>
+                            </div>
+                        </div>
+                        <div class="p-6 overflow-y-auto flex-1 space-y-2 text-xs text-green-400" id="logs-box">
+                            <div class="text-slate-500">[System initialization] Awaiting cloud socket bindings...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-col h-full overflow-y-auto">
+                    <div class="mb-4 shrink-0">
+                        <h2 class="text-xl text-brand-dark font-normal">System Configuration</h2>
+                    </div>
+                    <div class="space-y-4">
+                        <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+                            <h3 class="text-sm font-normal text-brand-dark mb-3">Database Credentials</h3>
+                            <div class="space-y-3 text-xs font-mono">
+                                <div>
+                                    <label class="block text-xs text-brand-dark mb-1 font-sans">Firebase Database URI</label>
+                                    <input type="text" readonly value="https://blue-bottle-experiment-default-rtdb.asia-southeast1.firebasedatabase.app" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-gray-500 outline-none">
+                                </div>
+                                <div>
+                                    <label class="block text-xs text-brand-dark mb-1 font-sans">Project identifier</label>
+                                    <input type="text" readonly value="blue-bottle-experiment" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-gray-500 outline-none">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+                            <h3 class="text-sm font-normal text-brand-dark mb-1">Bidirectional Telemetry Rules</h3>
+                            <p class="text-xs text-brand-subtle leading-relaxed">The mobile client running Phyphox reports values of camera luma straight to the currentLux branch. Whenever recording switches to Active, a background thread records time/lux coordinate data-pairs directly.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyDxizhrJxCB5Hmi8es__0MIecfB9mV6R8w",
+            authDomain: "blue-bottle-experiment.firebaseapp.com",
+            databaseURL: "https://blue-bottle-experiment-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "blue-bottle-experiment",
+            storageBucket: "blue-bottle-experiment.firebasestorage.app",
+            messagingSenderId: "363072938771",
+            appId: "1:363072938771:web:e6a0d7f073fbb5e91a30e6"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let liveDataPoints = {};
+        let syncedSessions = {};
+        let chart = null;
+        let historyChart = null;
+        let activeViewSessionId = null; 
+
+        // Multiview state variables
+        let multiviewSelectedList = [];
+        let multiviewChartInstance = null;
+
+        let dbConnected = false;
+        let appOnline = false;
+        let isRecording = false;
+        let wasRecording = false;
+        let currentLuxVal = null;
+        let selectedSessions = new Set();
+        let lastSessionKeys = new Set();
+        let updateScheduled = false;
+        let selectedExperimentType = "";
+        let selectedTrial = "1";
+        let activeDevicesCount = 0;
+        let currentActiveTab = 'dashboard';
+
+        function getDefaultSessionName() {
+            const date = new Date();
+            const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+            const month = months[date.getMonth()];
+            const day = date.getDate();
+            const hours = String(date.getHours()).padStart(2, '0');
+            const mins = String(date.getMinutes()).padStart(2, '0');
+            return `Session - ${month} ${day}, ${hours}:${mins}`;
+        }
+
+        function triggerScheduleChartUpdate() {
+            if (updateScheduled) return;
+            updateScheduled = true;
+            requestAnimationFrame(() => {
+                if (chart) {
+                    chart.update('none');
+                }
+                updateScheduled = false;
+            });
+        }
+
+        function recheckFirebaseWeb() {
+            logDiagnostic("Initiating manual connection handshake check with Firebase...");
+            const icon = document.getElementById("web-refresh-icon");
+            if (icon) {
+                icon.classList.add("fa-spin");
+                setTimeout(() => { icon.classList.remove("fa-spin"); }, 1000);
+            }
+            try {
+                firebase.database().goOffline();
+                setTimeout(() => {
+                    firebase.database().goOnline();
+                    logDiagnostic("Fired Firebase database goOnline reconnect signal.");
+                }, 150);
+            } catch (err) {
+                logDiagnostic(`Manual connection refresh failed: ${err.message}`);
+            }
+        }
+
+        function updateSystemStatus() {
+            const badge = document.getElementById("status-badge");
+            if (!badge) return;
+
+            const deviceText = activeDevicesCount > 1 ? `connected (${activeDevicesCount} units)` : "connected";
+
+            if (isRecording && appOnline) {
+                badge.innerHTML = `
+                    <div class="flex items-center gap-2">
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs bg-emerald-100 text-emerald-800 border border-emerald-200 uppercase tracking-wider">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <span>recording (${deviceText})</span>
+                        </span>
+                    </div>
+                `;
+            } else if (dbConnected && appOnline) {
+                badge.innerHTML = `
+                    <div class="flex items-center gap-2">
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs bg-emerald-100 text-emerald-800 border border-emerald-200 uppercase tracking-wider">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                            <span>${deviceText}</span>
+                        </span>
+                    </div>
+                `;
+            } else if (dbConnected && !appOnline) {
+                badge.innerHTML = `
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs bg-red-100 text-red-800 border border-red-200 uppercase tracking-wider">
+                        <span class="w-2 h-2 rounded-full bg-red-500"></span>
+                        <span>App Offline</span>
+                    </span>
+                `;
+            } else {
+                badge.innerHTML = `
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs bg-red-100 text-red-800 border border-red-200 uppercase tracking-wider">
+                        <span class="w-2 h-2 rounded-full bg-red-500"></span>
+                        <span>Web Offline</span>
+                    </span>
+                `;
+            }
+        }
+
+        function logDiagnostic(msg) {
+            const logsBox = document.getElementById("logs-box");
+            if (!logsBox) return;
+            const entry = document.createElement("div");
+            entry.className = "py-1 border-b border-slate-800/50 flex gap-2";
+            const time = new Date().toLocaleTimeString();
+            entry.innerHTML = `<span class="text-emerald-500">[${time}]</span> <span class="text-slate-300">${msg}</span>`;
+            logsBox.appendChild(entry);
+            logsBox.scrollTop = logsBox.scrollHeight;
+        }
+
+        function escapeHtml(str) {
+            if (!str) return "";
+            return str.toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        function initPlotChart() {
+            const ctx = document.getElementById("live-chart").getContext("2d");
+            
+            const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient.addColorStop(0, 'rgba(16, 185, 129, 0.25)');
+            gradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+
+            chart = new Chart(ctx, {
+                type: "line",
+                data: {
+                    datasets: [{
+                        label: "Luminance (Lv)",
+                        data: [],
+                        borderColor: "#10b981",
+                        backgroundColor: gradient,
+                        borderWidth: 2.5,
+                        pointRadius: 2,
+                        pointHoverRadius: 6,
+                        pointBackgroundColor: "#10b981",
+                        fill: true,
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    interaction: {
+                        intersect: false,
+                        mode: 'nearest',
+                        axis: 'x'
+                    },
+                    scales: {
+                        x: {
+                            type: "linear",
+                            grid: { color: "#F1F5F9" },
+                            ticks: { color: "#64748B" },
+                            title: {
+                                display: true,
+                                text: '時間 (s)',
+                                color: "#64748B",
+                                font: { size: 11, weight: 'medium' }
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: "#F1F5F9" },
+                            ticks: { color: "#64748B" },
+                            title: {
+                                display: true,
+                                text: '亮度 (Lv)',
+                                color: "#64748B",
+                                font: { size: 11, weight: 'medium' }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            enabled: true,
+                            backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                            titleColor: '#ffffff',
+                            bodyColor: '#34d399',
+                            borderColor: '#334155',
+                            borderWidth: 1,
+                            padding: 10,
+                            displayColors: false,
+                            callbacks: {
+                                title: function(context) {
+                                    return `Time: ${context[0].parsed.x.toFixed(2)}s`;
+                                },
+                                label: function(context) {
+                                    return `Luminance: ${context.parsed.y.toFixed(3)} Lv`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateChart(sortedPoints) {
+            if (!chart || activeViewSessionId !== null) return; 
+            if (sortedPoints.length === 0) {
+                chart.data.datasets[0].data = [];
+                triggerScheduleChartUpdate();
+                return;
+            }
+
+            const baseTime = sortedPoints[0].timestamp;
+            const plotData = sortedPoints.map(p => ({
+                x: parseFloat(((p.timestamp - baseTime) / 1000.0).toFixed(2)),
+                y: p.lux
+            }));
+
+            chart.data.datasets[0].data = plotData;
+            triggerScheduleChartUpdate();
+        }
+
+        function showSavedPopup(id, title) {
+            const popup = document.getElementById("recording-saved-popup");
+            const viewBtn = document.getElementById("popup-view-btn");
+            if (!popup || !viewBtn) return;
+            
+            viewBtn.onclick = () => {
+                popup.classList.add("translate-y-10", "opacity-0");
+                setTimeout(() => popup.classList.add("hidden"), 300);
+                switchTab('history');
+                viewSession(id);
+            };
+            
+            popup.classList.remove("hidden");
+            setTimeout(() => {
+                popup.classList.remove("translate-y-10", "opacity-0");
+            }, 10);
+            
+            setTimeout(() => {
+                popup.classList.add("translate-y-10", "opacity-0");
+                setTimeout(() => popup.classList.add("hidden"), 300);
+            }, 8000);
+        }
+
+        function registerSocketListeners() {
+            db.ref(".info/connected").on("value", (snap) => {
+                dbConnected = snap.val() || false;
+                updateSystemStatus();
+                if (dbConnected) {
+                    logDiagnostic("Connected to database gateway.");
+                } else {
+                    logDiagnostic("Interrupted. Retrying Cloud Sync...");
+                }
+            });
+
+            db.ref("status/appOnline").on("value", (snap) => {
+                appOnline = snap.val() || false;
+                updateSystemStatus();
+                const toggleBtn = document.getElementById("recording-toggle-btn");
+
+                if (appOnline) {
+                    toggleBtn.disabled = false;
+                    toggleBtn.className = "flex-1 sm:flex-initial py-2.5 px-5 rounded-xl text-xs text-white bg-brand-dark hover:bg-emerald-800 transition-all shadow flex items-center justify-center gap-1.5 cursor-pointer font-normal";
+                    logDiagnostic("Smart light sensor client connected.");
+                } else {
+                    toggleBtn.disabled = true;
+                    toggleBtn.className = "flex-1 sm:flex-initial py-2.5 px-5 rounded-xl text-xs text-white bg-slate-200 cursor-not-allowed transition-all shadow flex items-center justify-center gap-1.5 font-normal";
+                    logDiagnostic("Smart light sensor client offline.");
+
+                    db.ref("commands/isRecording").once("value", (recSnap) => {
+                        if (recSnap.val() === true) {
+                            db.ref("commands/isRecording").set(false);
+                        }
+                    });
+
+                    liveDataPoints = {};
+                    currentLuxVal = null;
+                    rebuildLiveChart();
+                }
+            });
+
+            db.ref("currentLux").on("value", (snap) => {
+                const lux = snap.val();
+                if (lux !== null && appOnline) {
+                    currentLuxVal = lux;
+                } else {
+                    currentLuxVal = null;
+                }
+                updateSystemStatus();
+            });
+
+            db.ref("commands/isRecording").on("value", (snap) => {
+                isRecording = snap.val() || false;
+                updateSystemStatus();
+                const toggleBtn = document.getElementById("recording-toggle-btn");
+                const toggleIcon = document.getElementById("record-btn-icon");
+                const toggleText = document.getElementById("record-btn-text");
+
+                if (wasRecording && !isRecording) {
+                    db.ref("liveData").remove();
+                    liveDataPoints = {};
+                    if (chart) {
+                        chart.data.datasets[0].data = [];
+                        triggerScheduleChartUpdate();
+                    }
+                    logDiagnostic("Recording stopped. Active stream cleared.");
+                }
+
+                wasRecording = isRecording;
+
+                db.ref("status/appOnline").once("value", (onlineSnap) => {
+                    const isOnline = onlineSnap.val() || false;
+                    if (isRecording) {
+                        if (isOnline) {
+                            if (toggleText) toggleText.innerText = "Stop";
+                            if (toggleIcon) {
+                                toggleIcon.className = "fa-solid fa-stop text-[10px]";
+                            }
+                            toggleBtn.className = "flex-1 sm:flex-initial py-2.5 px-5 rounded-xl text-xs text-white bg-red-600 hover:bg-red-700 transition-all shadow flex items-center justify-center gap-1.5 cursor-pointer font-normal";
+                        }
+                        logDiagnostic("Telemetry stream: active.");
+                    } else {
+                        if (isOnline) {
+                            if (toggleText) toggleText.innerText = "Start";
+                            if (toggleIcon) {
+                                toggleIcon.className = "fa-solid fa-play text-[10px]";
+                            }
+                            toggleBtn.className = "flex-1 sm:flex-initial py-2.5 px-5 rounded-xl text-xs text-white bg-brand-dark hover:bg-emerald-800 transition-all shadow flex items-center justify-center gap-1.5 cursor-pointer font-normal";
+                        }
+                        logDiagnostic("Telemetry stream: standby.");
+                    }
+                });
+            });
+
+            db.ref("commands/isRecording").once("value", (recSnap) => {
+                const isRec = recSnap.val() || false;
+                if (!isRec) {
+                    db.ref("liveData").remove();
+                    liveDataPoints = {};
+                    if (chart) {
+                        chart.data.datasets[0].data = [];
+                        triggerScheduleChartUpdate();
+                    }
+                    logDiagnostic("Cold-purged residual stale liveData from cloud.");
+                }
+            });
+
+            db.ref("devices").on("value", (snap) => {
+                const devs = snap.val() || {};
+                activeDevicesCount = Object.keys(devs).length;
+                updateSystemStatus();
+            });
+
+            db.ref("commands/experimentTypes").on("value", (snap) => {
+                const types = snap.val() || [];
+                renderExperimentTypes(types);
+                updateDropdownOptions(types);
+            });
+
+            db.ref("commands/selectedExperimentType").on("value", (snap) => {
+                selectedExperimentType = snap.val() || "";
+                const display = document.getElementById("selected-type-display");
+                if (display) display.innerText = selectedExperimentType || "Select Type";
+            });
+
+            db.ref("commands/selectedTrial").on("value", (snap) => {
+                selectedTrial = snap.val() || "1";
+                updateTrialUI(selectedTrial);
+            });
+
+            function rebuildLiveChart() {
+                if (!chart || activeViewSessionId !== null) return;
+                
+                const points = Object.values(liveDataPoints).sort((a, b) => a.timestamp - b.timestamp);
+                if (points.length === 0) {
+                    chart.data.datasets[0].data = [];
+                    triggerScheduleChartUpdate();
+                    return;
+                }
+                
+                const oldestTime = points[0].timestamp;
+                const plotData = points.map(p => ({
+                    x: parseFloat(((p.timestamp - oldestTime) / 1000.0).toFixed(3)),
+                    y: p.lux
+                }));
+                
+                chart.data.datasets[0].data = plotData;
+                triggerScheduleChartUpdate();
+            }
+
+            db.ref("liveData").on("child_added", (snap) => {
+                const data = snap.val();
+                if (!data) return;
+                liveDataPoints[snap.key] = data;
+                rebuildLiveChart();
+            });
+
+            db.ref("liveData").on("child_removed", (snap) => {
+                delete liveDataPoints[snap.key];
+                rebuildLiveChart();
+            });
+
+            db.ref("sessions").on("value", (snap) => {
+                const data = snap.val() || {};
+                const currentKeys = Object.keys(data);
+                
+                let newKey = null;
+                if (lastSessionKeys.size > 0) {
+                    for (let k of currentKeys) {
+                        if (!lastSessionKeys.has(k)) {
+                            newKey = k;
+                            break;
+                        }
+                    }
+                }
+                
+                lastSessionKeys = new Set(currentKeys);
+                
+                if (newKey && data[newKey]) {
+                    const newSession = data[newKey];
+                    if (Date.now() - newSession.timestamp < 15000) {
+                        showSavedPopup(newSession.id, newSession.title);
+                    }
+                }
+
+                syncedSessions = data;
+
+                // Keep multiview selection in sync with actual database content and update titles dynamically
+                multiviewSelectedList = multiviewSelectedList.filter(item => {
+                    const cleanId = item.id.toString().replace('session_', '');
+                    const dbSession = data[`session_${cleanId}`] || data[cleanId];
+                    if (dbSession) {
+                        item.title = dbSession.title;
+                        return true;
+                    }
+                    return false;
+                });
+
+                if (currentActiveTab === 'history') {
+                    renderSessionsList(data);
+                } else if (currentActiveTab === 'multiview') {
+                    renderMultiviewSidebar();
+                    renderMultiviewActiveList();
+                    updateMultiviewChart();
+                }
+
+                if (activeViewSessionId !== null && !data[`session_${activeViewSessionId}`]) {
+                    closeSessionView();
+                }
+            });
+        }
+
+        function updateSessionLabel() {} // Disabled
+
+        function renderExperimentTypes(types) {
+            const list = document.getElementById("experiment-types-list");
+            if (!list) return;
+            if (!types || types.length === 0) {
+                list.innerHTML = '<div class="text-sm text-brand-subtle py-4 text-center bg-gray-50 border border-gray-100 rounded-2xl">No experiment types added yet.</div>';
+                return;
+            }
+            list.innerHTML = types.map((t, idx) => `
+                <div class="flex items-center justify-between bg-gray-50 hover:bg-gray-100 border border-gray-100 rounded-xl px-4 py-3 transition-colors">
+                    <span class="text-brand-dark text-sm">${t}</span>
+                    <button onclick="removeExperimentType(${idx})" class="text-gray-400 hover:text-red-500 transition-colors p-1">
+                        <i class="fa-solid fa-trash-can text-sm"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function updateDropdownOptions(types) {
+            const display = document.getElementById("selected-type-display");
+            const optionsContainer = document.getElementById("dropdown-options");
+            if (!optionsContainer) return;
+
+            db.ref("commands/selectedExperimentType").once("value", snap => {
+                const currentVal = snap.val() || "";
+                display.innerText = currentVal || "Select Type";
+                
+                let html = '<div class="px-3 py-2 hover:bg-emerald-50 cursor-pointer text-[11px] text-gray-500 italic" onclick="selectType(\'\')">Clear Selection</div>';
+                if (types && types.length > 0) {
+                    html += types.map(t => `
+                        <div class="px-3 py-2 hover:bg-emerald-50 cursor-pointer text-[11px] text-brand-dark flex justify-between items-center ${t === currentVal ? 'bg-emerald-50' : ''}" onclick="selectType('${t}')">
+                            <span>${t}</span>
+                            ${t === currentVal ? '<i class="fa-solid fa-check text-emerald-600"></i>' : ''}
+                        </div>
+                    `).join('');
+                } else {
+                    html += '<div class="px-3 py-2 text-[11px] text-gray-400 text-center">No types added yet</div>';
+                }
+                optionsContainer.innerHTML = html;
+            });
+        }
+
+        function selectType(type) {
+            db.ref("commands/selectedExperimentType").set(type);
+            document.getElementById("dropdown-options").classList.add("hidden");
+            updateLiveSessionName(type, selectedTrial);
+        }
+
+        function addExperimentType() {
+            const input = document.getElementById("new-experiment-type-input");
+            const val = input.value.trim();
+            if(!val) return;
+            db.ref("commands/experimentTypes").once("value", snap => {
+                const types = snap.val() || [];
+                if (!types.includes(val)) {
+                    types.push(val);
+                    db.ref("commands/experimentTypes").set(types).then(() => {
+                        input.value = "";
+                        logDiagnostic(`Added experiment type: ${val}`);
+                    });
+                } else {
+                    alert("Type already exists");
+                }
+            });
+        }
+
+        function removeExperimentType(idx) {
+            db.ref("commands/experimentTypes").once("value", snap => {
+                const types = snap.val() || [];
+                if (idx >= 0 && idx < types.length) {
+                    const removedType = types[idx];
+                    types.splice(idx, 1);
+                    db.ref("commands/experimentTypes").set(types).then(() => {
+                        db.ref("commands/selectedExperimentType").once("value", selSnap => {
+                            if (selSnap.val() === removedType) {
+                                selectType("");
+                            }
+                        });
+                    });
+                }
+            });
+        }
+
+        function namingTrialSelected(trial) {
+            db.ref("commands/selectedTrial").set(String(trial));
+            updateLiveSessionName(selectedExperimentType, String(trial));
+        }
+
+        function updateTrialUI(trial) {
+            const standardTrials = ['1','2','3','4','5'];
+            for(let i=1; i<=5; i++) {
+                const btn = document.getElementById(`btn-trial-${i}`);
+                if(btn) {
+                    if (trial == i) {
+                        btn.className = "px-3.5 py-2 rounded-lg text-sm transition-colors bg-emerald-600 text-white font-medium shadow-sm active-trial";
+                    } else {
+                        btn.className = "px-3.5 py-2 rounded-lg text-sm transition-colors hover:bg-gray-200 text-brand-dark";
+                    }
+                }
+            }
+            
+            const inlineInput = document.getElementById("inline-trial-input");
+            if (inlineInput) {
+                if (!standardTrials.includes(String(trial)) && trial !== "") {
+                    inlineInput.value = trial;
+                    inlineInput.className = "w-16 h-9 px-2 bg-emerald-600 text-white font-medium text-sm text-center outline-none transition-colors rounded-lg shadow-sm";
+                } else {
+                    if (standardTrials.includes(String(trial))) {
+                         inlineInput.value = "";
+                    }
+                    inlineInput.className = "w-16 h-9 px-2 bg-transparent text-brand-dark text-sm text-center outline-none focus:bg-white/50 transition-colors rounded-lg";
+                }
+            }
+        }
+
+        function getSelectedTrialLocally() {
+            const activeBtn = document.querySelector('.active-trial');
+            if (activeBtn) return activeBtn.innerText;
+            const val = document.getElementById("naming-trial-custom").value.trim();
+            return val || "1";
+        }
+
+        function updateLiveSessionName(type, trial) {
+            let sessionName = "Session";
+            if(type) sessionName = type;
+            if(trial) sessionName += " - " + trial;
+            db.ref("commands/sessionName").set(sessionName);
+        }
+
+        function toggleRecording() {
+            db.ref("commands/isRecording").once("value", (snap) => {
+                const isRecordingValue = snap.val() || false;
+                const nextRecording = !isRecordingValue;
+                
+                if (nextRecording) {
+                    let finalName = "";
+                    const type = selectedExperimentType ? selectedExperimentType.trim() : "";
+                    const trial = selectedTrial ? selectedTrial.trim() : "1";
+                    
+                    if (type) {
+                        finalName = type;
+                        if (trial) {
+                            finalName += " - " + trial;
+                        }
+                    } else {
+                        finalName = getDefaultSessionName();
+                    }
+                    db.ref("commands/sessionName").set(finalName);
+                    logDiagnostic(`Determined session name for stream: ${finalName}`);
+                }
+                
+                db.ref("commands/isRecording").set(nextRecording)
+                    .then(() => {
+                        logDiagnostic("Pipeline execution state modified.");
+                    })
+                    .catch(e => {
+                        logDiagnostic(`Failed state sync: ${e.message}`);
+                    });
+            });
+        }
+
+        function sanitizeFilename(name) {
+            if (!name) return "unnamed";
+            // Remove filesystem restricted characters \ / : * ? " < > |
+            return name.replace(/[\\/:*?"<>|]/g, "_").trim();
+        }
+
+        function applyXlsxFormatting(ws) {
+            if (!ws) return;
+            for (let ref in ws) {
+                if (ref[0] === '!') continue;
+                const cell = ws[ref];
+                if (!cell) continue;
+
+                const colMatch = ref.match(/^[A-Z]+/);
+                if (!colMatch) continue;
+                const col = colMatch[0];
+                const rowNum = parseInt(ref.slice(col.length), 10);
+
+                if (rowNum === 1) continue; // Skip header
+
+                // Convert value to number if string
+                if (typeof cell.v === 'string') {
+                    const parsedNum = parseFloat(cell.v);
+                    if (!isNaN(parsedNum)) {
+                        cell.v = parsedNum;
+                        cell.t = 'n';
+                    }
+                }
+
+                if (cell.t === 'n' || typeof cell.v === 'number') {
+                    cell.t = 'n';
+                    if (col === 'A') {
+                        cell.z = '0.00'; // 2 decimal places for time
+                    } else {
+                        cell.z = '0.000'; // 3 decimal places for other columns
+                    }
+                }
+            }
+        }
+
+        function exportLiveExcel() {
+            const keys = Object.keys(liveDataPoints);
+            if (keys.length === 0) {
+                logDiagnostic("Compilation error: empty live stream state.");
+                return;
+            }
+
+            logDiagnostic(`Compiling telemetry index containing ${keys.length} recordings...`);
+            const sorted = Object.values(liveDataPoints).sort((a,b) => a.timestamp - b.timestamp);
+            const baseTime = sorted[0].timestamp;
+
+            const excelRows = sorted.map(p => ({
+                "t": parseFloat(((p.timestamp - baseTime) / 1000.0).toFixed(3)),
+                "Lv": p.lux
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(excelRows);
+            applyXlsxFormatting(ws);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Live Telemetry");
+
+            const inputVal = document.getElementById("session-name").value.trim() || "remote_session";
+            const sanitizedName = sanitizeFilename(inputVal);
+            XLSX.writeFile(wb, `live_telemetry_${sanitizedName}.xlsx`);
+            logDiagnostic("Live Excel export success.");
+        }
+
+        function eraseCurrentLiveData() {
+            openConfirmModal(
+                "Reset Active Telemetry Stream",
+                "Are you sure you want to permanently clear the live plotting line data?",
+                () => {
+                    db.ref("liveData").remove()
+                        .then(() => {
+                            db.ref("currentLux").set(0);
+                            db.ref("commands/isRecording").set(false);
+                            logDiagnostic("Telemetry reset sequence successful.");
+                            closeConfirmModal();
+                        })
+                        .catch(err => {
+                            logDiagnostic(`Wipe operation error: ${err.message}`);
+                            closeConfirmModal();
+                        });
+                }
+            );
+        }
+
+        function renameSession(id) {
+            const session = syncedSessions[`session_${id}`];
+            if (!session) return;
+            
+            const modal = document.getElementById("rename-modal");
+            const input = document.getElementById("rename-input");
+            const btn = document.getElementById("rename-action-btn");
+            
+            input.value = session.title;
+            modal.classList.remove("hidden");
+            input.focus();
+            
+            const handleSave = () => {
+                const trimmed = input.value.trim();
+                if (trimmed.length > 0 && trimmed !== session.title) {
+                    db.ref(`sessions/session_${id}/title`).set(trimmed)
+                        .then(() => {
+                            logDiagnostic(`Successfully renamed session ${id} to "${trimmed}"`);
+                            if (activeViewSessionId == id) {
+                                document.getElementById("history-detail-title").innerText = trimmed;
+                            }
+                            closeRenameModal();
+                        })
+                        .catch(err => {
+                            logDiagnostic(`Failed to rename session: ${err.message}`);
+                            closeRenameModal();
+                        });
+                } else {
+                    closeRenameModal();
+                }
+            };
+            
+            const handleKeydown = (e) => {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleSave();
+                } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    closeRenameModal();
+                }
+            };
+            
+            btn.onclick = handleSave;
+            input.onkeydown = handleKeydown;
+        }
+        
+        function closeRenameModal() {
+            const modal = document.getElementById("rename-modal");
+            const input = document.getElementById("rename-input");
+            const btn = document.getElementById("rename-action-btn");
+            modal.classList.add("hidden");
+            btn.onclick = null;
+            input.onkeydown = null;
+        }
+
+        function renameActiveSession() {
+            if (activeViewSessionId !== null) {
+                renameSession(activeViewSessionId);
+            }
+        }
+
+        function renderSessionsList(sessions) {
+            const tbody = document.getElementById("sessions-tbody");
+            if (!tbody) return;
+            tbody.innerHTML = "";
+
+            const currentKeys = new Set(Object.keys(sessions).map(k => k.replace('session_', '')));
+            for (let id of selectedSessions) {
+                if (!currentKeys.has(id)) {
+                    selectedSessions.delete(id);
+                }
+            }
+
+            const keys = Object.keys(sessions);
+            if (keys.length === 0) {
+                tbody.innerHTML = `
+                    <tr id="no-sessions-row">
+                        <td colspan="5" class="text-center text-brand-subtle py-8 px-6">
+                            <div class="max-w-md mx-auto">
+                                <i class="fa-solid fa-box-open text-2xl text-gray-300 mb-2"></i>
+                                <p class="text-xs text-brand-dark mb-1 font-normal">No historical sessions recorded</p>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                selectedSessions.clear();
+                const master = document.getElementById("select-all-sessions");
+                if (master) master.checked = false;
+                updateSelectedCountUI();
+                return;
+            }
+
+            const sorted = Object.values(sessions).sort((a,b) => b.timestamp - a.timestamp);
+
+            sorted.forEach(session => {
+                const tr = document.createElement("tr");
+                tr.className = "hover:bg-slate-50 transition-colors cursor-pointer";
+                tr.onclick = (e) => viewSession(session.id, e);
+
+                const isChecked = selectedSessions.has(session.id.toString());
+                const dateStr = new Date(session.timestamp).toLocaleString();
+                const durationSec = (session.durationMs / 1000.0).toFixed(1);
+
+                tr.innerHTML = `
+                    <td class="px-2 py-2 text-center cursor-pointer relative" onclick="toggleSessionSelection('${session.id}', event)" title="Click to select/deselect">
+                        <!-- Hidden input so standard querySelector('.session-checkbox') logic stays completely intact! -->
+                        <input type="checkbox" class="session-checkbox hidden" value="${session.id}" ${isChecked ? 'checked' : ''} onchange="handleCheckboxToggle(this, '${session.id}')" onclick="event.stopPropagation()">
+                        
+                        <!-- Custom circular checkbox element with a large clickable area -->
+                        <div class="flex items-center justify-center w-12 h-12 mx-auto select-none">
+                            <div class="w-6 h-6 rounded-full border-2 transition-all flex items-center justify-center ${isChecked ? 'bg-emerald-600 border-emerald-600' : 'bg-white border-slate-300 hover:border-emerald-500'}">
+                                <div class="w-2.5 h-2.5 rounded-full bg-white transition-all ${isChecked ? 'scale-100 opacity-100' : 'scale-0 opacity-0'}"></div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4">
+                        <div class="text-brand-dark text-sm font-normal cursor-pointer hover:text-emerald-600 transition-colors" onclick="renameSession(${session.id}); event.stopPropagation();" title="Click to rename">${escapeHtml(session.title)}</div>
+                        <div class="text-[11px] text-brand-subtle mt-0.5 font-normal">${dateStr}</div>
+                    </td>
+                    <td class="px-6 py-4 font-mono text-xs text-brand-dark font-normal">${durationSec}s</td>
+                    <td class="px-6 py-4">
+                        <div class="text-[11px] text-brand-subtle font-normal">Average: <span class="font-mono text-emerald-600 font-normal">${parseFloat(session.avgLux).toFixed(3)}</span></div>
+                        <div class="text-[11px] text-brand-subtle font-normal">Peak: <span class="font-mono text-emerald-800 font-normal">${parseFloat(session.maxLux).toFixed(3)}</span></div>
+                    </td>
+                    <td class="px-6 py-4 text-right">
+                        <div class="flex items-center justify-end gap-2">
+                            <button class="text-xs px-2.5 py-1.5 bg-gray-100 text-brand-dark hover:bg-gray-200 rounded-lg transition-colors font-normal" onclick="downloadSessionExcel(${session.id}); event.stopPropagation();">
+                                <i class="fa-solid fa-file-export"></i> Excel
+                            </button>
+                            <button class="text-xs px-2.5 py-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors font-normal" onclick="deleteSession(${session.id}); event.stopPropagation();">
+                                <i class="fa-solid fa-trash-can"></i> Delete
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            updateSelectedCountUI();
+        }
+
+        function toggleSessionSelection(id, event) {
+            if (event) {
+                event.stopPropagation();
+            }
+            const td = event.currentTarget;
+            const checkbox = td.querySelector('.session-checkbox');
+            if (checkbox) {
+                checkbox.checked = !checkbox.checked;
+                handleCheckboxToggle(checkbox, id);
+            }
+        }
+
+        function handleCheckboxToggle(checkbox, id) {
+            if (checkbox.checked) {
+                selectedSessions.add(id.toString());
+            } else {
+                selectedSessions.delete(id.toString());
+            }
+            renderSessionsList(syncedSessions);
+        }
+
+        function updateSelectedCountUI() {
+            const checkboxes = document.querySelectorAll('.session-checkbox');
+            let checkedCount = 0;
+            checkboxes.forEach(cb => {
+                if (cb.checked) checkedCount++;
+            });
+
+            const delBtn = document.getElementById("batch-delete-btn");
+            const dlBtn = document.getElementById("batch-download-btn");
+            const mvBtn = document.getElementById("batch-multiview-btn");
+            const countDelText = document.getElementById("selected-count-delete");
+            const countDlText = document.getElementById("selected-count-download");
+            const countMvText = document.getElementById("selected-count-multiview");
+
+            if (countDelText) countDelText.innerText = checkedCount;
+            if (countDlText) countDlText.innerText = checkedCount;
+            if (countMvText) countMvText.innerText = checkedCount;
+
+            if (checkedCount > 0) {
+                if (delBtn) {
+                    delBtn.disabled = false;
+                    delBtn.classList.remove("cursor-not-allowed", "opacity-60", "bg-red-100", "text-red-700");
+                    delBtn.classList.add("cursor-pointer", "bg-red-600", "text-white", "hover:bg-red-700");
+                }
+                if (dlBtn) {
+                    dlBtn.disabled = false;
+                    dlBtn.classList.remove("cursor-not-allowed", "opacity-60", "bg-emerald-100", "text-emerald-700");
+                    dlBtn.classList.add("cursor-pointer", "bg-emerald-800", "text-white", "hover:bg-emerald-900");
+                }
+                if (mvBtn) {
+                    mvBtn.disabled = false;
+                    mvBtn.classList.remove("cursor-not-allowed", "opacity-60", "bg-blue-100", "text-blue-700");
+                    mvBtn.classList.add("cursor-pointer", "bg-blue-600", "text-white", "hover:bg-blue-700");
+                }
+            } else {
+                if (delBtn) {
+                    delBtn.disabled = true;
+                    delBtn.classList.add("cursor-not-allowed", "opacity-60", "bg-red-100", "text-red-700");
+                    delBtn.classList.remove("cursor-pointer", "bg-red-600", "text-white", "hover:bg-red-700");
+                }
+                if (dlBtn) {
+                    dlBtn.disabled = true;
+                    dlBtn.classList.add("cursor-not-allowed", "opacity-60", "bg-emerald-100", "text-emerald-700");
+                    dlBtn.classList.remove("cursor-pointer", "bg-emerald-800", "text-white", "hover:bg-emerald-900");
+                }
+                if (mvBtn) {
+                    mvBtn.disabled = true;
+                    mvBtn.classList.add("cursor-not-allowed", "opacity-60", "bg-blue-100", "text-blue-700");
+                    mvBtn.classList.remove("cursor-pointer", "bg-blue-600", "text-white", "hover:bg-blue-700");
+                }
+            }
+
+            const master = document.getElementById("select-all-sessions");
+            if (master) {
+                master.checked = (checkboxes.length > 0 && checkedCount === checkboxes.length);
+            }
+        }
+
+        function toggleSelectAll(masterCheckbox) {
+            const checkboxes = document.querySelectorAll('.session-checkbox');
+            checkboxes.forEach(cb => {
+                cb.checked = masterCheckbox.checked;
+                if (masterCheckbox.checked) {
+                    selectedSessions.add(cb.value.toString());
+                } else {
+                    selectedSessions.delete(cb.value.toString());
+                }
+            });
+            renderSessionsList(syncedSessions);
+        }
+
+        function deleteSelectedSessions() {
+            const ids = Array.from(selectedSessions);
+            if (ids.length === 0) return;
+
+            openConfirmModal(
+                "Delete Selected Sessions",
+                `Are you sure you want to permanently delete the ${ids.length} selected session(s)?`,
+                () => {
+                    const promises = ids.map(id => db.ref(`sessions/session_${id}`).remove());
+                    Promise.all(promises)
+                        .then(() => {
+                            logDiagnostic(`Successfully deleted ${ids.length} selected session(s).`);
+                            selectedSessions.clear();
+                            const master = document.getElementById("select-all-sessions");
+                            if (master) master.checked = false;
+                            updateSelectedCountUI();
+                            closeConfirmModal();
+                        })
+                        .catch(err => {
+                            logDiagnostic(`Batch deletion failed: ${err.message}`);
+                            closeConfirmModal();
+                        });
+                }
+            );
+        }
+
+        function downloadSelectedSessions() {
+            const ids = Array.from(selectedSessions);
+            if (ids.length === 0) return;
+
+            if (ids.length === 1) {
+                logDiagnostic(`Downloading single selected session (ID: ${ids[0]})...`);
+                downloadSessionExcel(ids[0]);
+                return;
+            }
+
+            logDiagnostic(`Assembling batch ZIP container containing ${ids.length} selected session(s)...`);
+            
+            const zip = new JSZip();
+            let fileAddedCount = 0;
+
+            ids.forEach(id => {
+                const session = syncedSessions[`session_${id}`];
+                if (!session) return;
+
+                const rawPoints = session.datapoints ? Object.values(session.datapoints) : [];
+                if (rawPoints.length === 0) return;
+
+                const sorted = rawPoints.sort((a,b) => a.timeMillis - b.timeMillis);
+                
+                const excelRows = sorted.map(p => ({
+                    "t": parseFloat((p.timeMillis / 1000.0).toFixed(3)),
+                    "Lv": p.lux
+                }));
+
+                const ws = XLSX.utils.json_to_sheet(excelRows);
+                applyXlsxFormatting(ws);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Telemetry Session");
+
+                // Generate binary array buffer content
+                const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                const filename = `${sanitizeFilename(session.title)}.xlsx`;
+                
+                zip.file(filename, wbout);
+                fileAddedCount++;
+            });
+
+            if (fileAddedCount === 0) {
+                logDiagnostic("Batch ZIP generation failed: No valid telemetry datasets available.");
+                return;
+            }
+
+            logDiagnostic("Packing Excel workspaces into single ZIP file...");
+            zip.generateAsync({ type: "blob" })
+                .then(function(content) {
+                    const link = document.createElement("a");
+                    link.download = `historical_telemetry_export_${Date.now()}.zip`;
+                    link.href = URL.createObjectURL(content);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    logDiagnostic(`Batch ZIP compilation complete. Downloaded ${fileAddedCount} session(s).`);
+                })
+                .catch(err => {
+                    logDiagnostic(`ZIP building error: ${err.message}`);
+                });
+        }
+
+        function viewSession(id, event) {
+            if (event && (event.target.closest('button') || event.target.closest('input[type="checkbox"]'))) {
+                return;
+            }
+
+            const session = syncedSessions[`session_${id}`];
+            if (!session) return;
+
+            activeViewSessionId = id;
+
+            document.getElementById("history-list-view").classList.add("hidden");
+            document.getElementById("history-detail-view").classList.remove("hidden");
+
+            document.getElementById("history-detail-title").innerText = `${session.title}`;
+            const durationSec = (session.durationMs / 1000.0).toFixed(1);
+            document.getElementById("history-detail-duration").innerText = `${durationSec}s`;
+            document.getElementById("history-detail-avg").innerText = parseFloat(session.avgLux).toFixed(3);
+            document.getElementById("history-detail-max").innerText = parseFloat(session.maxLux).toFixed(3);
+
+            const downloadBtn = document.getElementById("history-detail-download-btn");
+            if (downloadBtn) {
+                downloadBtn.onclick = () => downloadSessionExcel(id);
+            }
+
+            const rawPoints = session.datapoints ? Object.values(session.datapoints) : [];
+            const sorted = rawPoints.sort((a,b) => a.timeMillis - b.timeMillis);
+
+            const plotData = sorted.map(p => ({
+                x: parseFloat((p.timeMillis / 1000.0).toFixed(2)),
+                y: p.lux
+            }));
+
+            if (!historyChart) {
+                const ctx = document.getElementById("history-chart").getContext("2d");
+                const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+                gradient.addColorStop(0, 'rgba(59, 130, 246, 0.25)'); 
+                gradient.addColorStop(1, 'rgba(59, 130, 246, 0.0)');
+
+                historyChart = new Chart(ctx, {
+                    type: "line",
+                    data: {
+                        datasets: [{
+                            label: "Luminance (Lv)",
+                            data: plotData,
+                            borderColor: "#3b82f6",
+                            backgroundColor: gradient,
+                            borderWidth: 2.5,
+                            pointRadius: 2,
+                            pointHoverRadius: 6,
+                            pointBackgroundColor: "#3b82f6",
+                            fill: true,
+                            tension: 0.1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        interaction: {
+                            intersect: false,
+                            mode: 'nearest',
+                            axis: 'x'
+                        },
+                        scales: {
+                            x: {
+                                type: "linear",
+                                grid: { color: "#F1F5F9" },
+                                ticks: { color: "#64748B" },
+                                title: {
+                                    display: true,
+                                    text: '時間 (s)',
+                                    color: "#64748B",
+                                    font: { size: 11, weight: 'medium' }
+                                }
+                            },
+                            y: {
+                                grid: { color: "#F1F5F9" },
+                                ticks: { color: "#64748B" },
+                                title: {
+                                    display: true,
+                                    text: '亮度 (Lv)',
+                                    color: "#64748B",
+                                    font: { size: 11, weight: 'medium' }
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                enabled: true,
+                                backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                                titleColor: '#ffffff',
+                                bodyColor: '#60a5fa',
+                                borderColor: '#334155',
+                                borderWidth: 1,
+                                padding: 10,
+                                displayColors: false,
+                                callbacks: {
+                                    title: function(context) {
+                                        return `Time: ${context[0].parsed.x.toFixed(2)}s`;
+                                    },
+                                    label: function(context) {
+                                        return `Luminance: ${context.parsed.y.toFixed(3)} Lv`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                historyChart.data.datasets[0].data = plotData;
+                historyChart.update();
+            }
+
+            logDiagnostic(`Opened historical view details: "${session.title}" (ID: ${id})`);
+        }
+
+        function closeHistoricalDetailView() {
+            activeViewSessionId = null;
+            document.getElementById("history-detail-view").classList.add("hidden");
+            document.getElementById("history-list-view").classList.remove("hidden");
+
+            const selectAll = document.getElementById("select-all-sessions");
+            if (selectAll) selectAll.checked = false;
+            selectedSessions.clear();
+            updateSelectedCountUI();
+            if (historyChart) {
+                historyChart.data.datasets[0].data = [];
+                historyChart.update();
+            }
+        }
+
+        function closeSessionView() {
+            closeHistoricalDetailView();
+        }
+
+        function downloadSessionExcel(id) {
+            const session = syncedSessions[`session_${id}`];
+            if (!session) return;
+
+            const rawPoints = session.datapoints ? Object.values(session.datapoints) : [];
+            if (rawPoints.length === 0) {
+                logDiagnostic("Export failed: empty dataset.");
+                return;
+            }
+
+            const sorted = rawPoints.sort((a,b) => a.timeMillis - b.timeMillis);
+            logDiagnostic(`Assembling Excel datasheet download matching dataset: "${session.title}"...`);
+
+            const excelRows = sorted.map(p => ({
+                "t": parseFloat((p.timeMillis / 1000.0).toFixed(3)),
+                "Lv": p.lux
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(excelRows);
+            applyXlsxFormatting(ws);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Telemetry Session");
+
+            const sanitizedName = sanitizeFilename(session.title);
+            XLSX.writeFile(wb, `${sanitizedName}.xlsx`);
+            logDiagnostic("Historical Excel spreadsheet downloaded.");
+        }
+
+        function deleteSession(id) {
+            const session = syncedSessions[`session_${id}`];
+            if (!session) return;
+
+            openConfirmModal(
+                "Delete Database Session Record",
+                `Are you sure you want to permanently delete "${session.title}" from index registries?`,
+                () => {
+                    db.ref(`sessions/session_${id}`).remove()
+                        .then(() => {
+                            logDiagnostic(`Removed session parameter tracking: session_${id}`);
+                            selectedSessions.delete(id.toString());
+                            updateSelectedCountUI();
+                            closeConfirmModal();
+                        })
+                        .catch(err => {
+                            logDiagnostic(`Index deletion error: ${err.message}`);
+                            closeConfirmModal();
+                        });
+                }
+            );
+        }
+
+        function promptDeleteAllSessionsSoft() {
+            if (Object.keys(syncedSessions).length === 0) {
+                logDiagnostic("Recycle failed: empty session directory.");
+                return;
+            }
+
+            openConfirmModal(
+                "Recycle Directory Sessions",
+                "Are you sure you want to delete all historical session tables?",
+                () => {
+                    db.ref("sessions").remove()
+                        .then(() => {
+                            logDiagnostic("Successfully completed delete request.");
+                            closeConfirmModal();
+                        })
+                        .catch(err => {
+                            logDiagnostic(`Delete error: ${err.message}`);
+                            closeConfirmModal();
+                        });
+                }
+            );
+        }
+
+        function switchTab(viewId) {
+            currentActiveTab = viewId;
+            if (viewId !== 'history' || (viewId === 'history' && activeViewSessionId !== null)) {
+                closeHistoricalDetailView();
+            }
+
+            document.querySelectorAll('.view-panel').forEach(view => {
+                view.classList.add('hidden');
+                view.classList.remove('flex');
+            });
+            document.querySelectorAll('.nav-item').forEach(btn => {
+                btn.className = "nav-item flex items-center gap-2 px-5 py-2.5 text-sm text-brand-text rounded-lg hover:bg-brand-active cursor-pointer transition-all font-normal";
+            });
+
+            const activeView = document.getElementById(`view-${viewId}`);
+            if (activeView) {
+                activeView.classList.remove('hidden');
+                activeView.classList.add('flex');
+            }
+
+            const activeBtn = document.getElementById(`nav-${viewId}`);
+            if (activeBtn) {
+                activeBtn.className = "nav-item flex items-center gap-2 px-5 py-2.5 text-sm text-brand-dark bg-brand-active rounded-lg cursor-pointer transition-all shadow-xs font-normal";
+            }
+
+            if (viewId === 'history') {
+                renderSessionsList(syncedSessions);
+            } else if (viewId === 'multiview') {
+                renderMultiviewSidebar();
+                renderMultiviewActiveList();
+                updateMultiviewChart();
+            }
+        }
+
+        let activeConfirmCallback = null;
+        function openConfirmModal(title, description, onConfirm) {
+            document.getElementById("confirm-title").innerText = title;
+            document.getElementById("confirm-desc").innerText = description;
+            activeConfirmCallback = onConfirm;
+            document.getElementById("confirm-modal").classList.remove("hidden");
+        }
+
+        function closeConfirmModal() {
+            document.getElementById("confirm-modal").classList.add("hidden");
+            activeConfirmCallback = null;
+        }
+
+        document.getElementById("confirm-action-btn").addEventListener("click", () => {
+            if (activeConfirmCallback) {
+                activeConfirmCallback();
+            }
+        });
+
+        function clearLogs() {
+            const logsBox = document.getElementById("logs-box");
+            if(logsBox) logsBox.innerHTML = '<div class="text-slate-500">[System event logs] Console stream wiped clean. Waiting for next event...</div>';
+            logDiagnostic("Diagnostic console buffer cleared.");
+        }
+
+        // Floating Web Touch-based Pull-To-Refresh Controller with haptics
+        let touchStartY = 0;
+        let touchStartStartX = 0;
+        let activePull = false;
+        const PULL_THRESHOLD = 80;
+        const MAX_PULL = 130;
+
+        const pullIndicator = document.getElementById("pull-refresh-indicator");
+        const pullSpinner = document.getElementById("pull-refresh-spinner");
+
+        function setupPullToRefresh() {
+            if (!pullIndicator || !pullSpinner) return;
+            
+            document.addEventListener("touchstart", (e) => {
+                if (e.touches.length !== 1) return;
+                
+                const target = e.target;
+                const scrollContainer = target.closest('.overflow-y-auto');
+                if (scrollContainer && scrollContainer.scrollTop > 0) {
+                    activePull = false;
+                    return;
+                }
+
+                touchStartY = e.touches[0].clientY;
+                touchStartStartX = e.touches[0].clientX;
+                activePull = true;
+            }, { passive: true });
+
+            document.addEventListener("touchmove", (e) => {
+                if (!activePull || e.touches.length !== 1) return;
+                
+                const currentY = e.touches[0].clientY;
+                const currentX = e.touches[0].clientX;
+                const dy = currentY - touchStartY;
+                const dx = currentX - touchStartStartX;
+                
+                if (dy > 0 && Math.abs(dy) > Math.abs(dx) * 1.5) {
+                    const pullDistance = Math.min(MAX_PULL, dy * 0.4);
+                    
+                    pullIndicator.classList.remove("opacity-0");
+                    pullIndicator.style.transform = `translate(-50%, ${pullDistance}px)`;
+                    
+                    const rotateDegree = Math.min(360, (pullDistance / PULL_THRESHOLD) * 360);
+                    pullSpinner.style.transform = `rotate(${rotateDegree}deg)`;
+                    
+                    if (pullDistance >= PULL_THRESHOLD) {
+                        pullIndicator.classList.add("bg-emerald-50", "border-emerald-500", "scale-110");
+                        pullIndicator.classList.remove("bg-white", "border-gray-150");
+                    } else {
+                        pullIndicator.classList.remove("bg-emerald-50", "border-emerald-500", "scale-110");
+                        pullIndicator.classList.add("bg-white", "border-gray-150");
+                    }
+                }
+            }, { passive: true });
+
+            document.addEventListener("touchend", (e) => {
+                if (!activePull) return;
+                activePull = false;
+                
+                const currentY = e.changedTouches[0].clientY;
+                const dy = currentY - touchStartY;
+                const pullDistance = Math.min(MAX_PULL, dy * 0.4);
+
+                if (pullDistance >= PULL_THRESHOLD) {
+                    if (navigator.vibrate) {
+                        try {
+                            navigator.vibrate(40);
+                        } catch (err) {}
+                    }
+                    
+                    pullIndicator.style.transform = `translate(-50%, ${PULL_THRESHOLD}px)`;
+                    pullSpinner.classList.add("fa-spin");
+                    
+                    recheckFirebaseWeb();
+                    
+                    setTimeout(() => {
+                        pullSpinner.classList.remove("fa-spin");
+                        pullIndicator.style.transform = "translate(-50%, -100px)";
+                        pullIndicator.classList.add("opacity-0");
+                        pullIndicator.classList.remove("bg-emerald-50", "border-emerald-500", "scale-110");
+                        pullIndicator.classList.add("bg-white", "border-gray-150");
+                    }, 1000);
+                } else {
+                    pullIndicator.style.transform = "translate(-50%, -100px)";
+                    pullIndicator.classList.add("opacity-0");
+                }
+            });
+        }
+
+        // Global Keyboard Event Blocker to prevent interference with UI
+        document.addEventListener('keydown', function(event) {
+            const activeEl = document.activeElement;
+            const tag = activeEl ? activeEl.tagName.toLowerCase() : '';
+            // Allow typing inside text inputs, textareas, or editable elements
+            if (activeEl && (tag === 'input' || tag === 'textarea' || activeEl.isContentEditable)) {
+                return;
+            }
+            
+            // Disable default browser interaction for Space, Enter, or backspace, etc. outside input fields
+            if (event.key === ' ' || event.key === 'Spacebar' || event.key === 'Enter') {
+                event.preventDefault();
+                // Also blur the active element so subsequent keypresses are clean
+                if (activeEl && typeof activeEl.blur === 'function') {
+                    activeEl.blur();
+                }
+            }
+        });
+
+        // Blur buttons on click to prevent spacebar or enter from re-focusing/re-triggering them
+        document.addEventListener('click', function(event) {
+            const target = event.target;
+            const button = target.closest('button, [role="button"], a');
+            if (button && typeof button.blur === 'function') {
+                button.blur();
+            }
+        });
+
+        // Modern Screen Awake Lock & Canvas-Video Bypass Hybrid
+        let wakeLockObj = null;
+
+        async function requestScreenWakeLock() {
+            if (!('wakeLock' in navigator)) {
+                logDiagnostic("Wake Lock API not supported. Relying on canvas autoplay trick.");
+                return;
+            }
+            try {
+                wakeLockObj = await navigator.wakeLock.request('screen');
+                logDiagnostic("System Awake Lock active.");
+                wakeLockObj.addEventListener('release', () => {
+                    logDiagnostic("System Awake Lock released.");
+                });
+            } catch (err) {
+                logDiagnostic(`Wake Lock Error: ${err.message}`);
+            }
+        }
+
+        document.addEventListener('visibilitychange', async () => {
+            if (wakeLockObj !== null && document.visibilityState === 'visible') {
+                await requestScreenWakeLock();
+            }
+        });
+
+        function initiateKeepScreenAwakeVideo() {
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = 16;
+                canvas.height = 16;
+                const ctx = canvas.getContext('2d');
+                
+                // Keep changing pixels so browser hardware decoder remains continuously active
+                setInterval(() => {
+                    ctx.fillStyle = `rgb(${Math.floor(Math.random()*15)}, ${Math.floor(Math.random()*15)}, ${Math.floor(Math.random()*15)})`;
+                    ctx.fillRect(0, 0, 16, 16);
+                }, 1500);
+
+                const stream = canvas.captureStream ? canvas.captureStream(1) : null;
+                if (stream) {
+                    const video = document.createElement('video');
+                    video.srcObject = stream;
+                    video.muted = true;
+                    video.playsInline = true;
+                    video.loop = true;
+                    video.style.position = 'fixed';
+                    video.style.opacity = '0.001';
+                    video.style.left = '0px';
+                    video.style.top = '0px';
+                    video.style.width = '1px';
+                    video.style.height = '1px';
+                    video.style.pointerEvents = 'none';
+                    video.id = 'keep-awake-video-node';
+                    document.body.appendChild(video);
+                    
+                    video.play()
+                        .then(() => logDiagnostic("Anti-Sleep Engine: Canvas video loop loaded."))
+                        .catch(e => {
+                            logDiagnostic("Autoplay blocked. Registering interaction-triggered display wake trigger.");
+                            document.addEventListener('click', () => {
+                                video.play().catch(()=>{});
+                            }, { once: true });
+                        });
+                }
+            } catch (e) {
+                logDiagnostic(`Anti-Sleep canvas engine bypassed: ${e.message}`);
+            }
+        }
+
+        // Microsoft 365 / Office Excel Palette definition (~20 options)
+        const M365_COLORS = [
+            { name: "Excel Green", hex: "#107c41" },
+            { name: "Classic Navy", hex: "#0078d4" },
+            { name: "Office Coral", hex: "#d83b01" },
+            { name: "Sunset Orange", hex: "#ff8c00" },
+            { name: "OneNote Purple", hex: "#5c2d91" },
+            { name: "Deep Teal", hex: "#008272" },
+            { name: "Forest Gate", hex: "#004b50" },
+            { name: "Access Maroon", hex: "#a80000" },
+            { name: "PowerPoint Pink", hex: "#e3008c" },
+            { name: "Soft Lavender", hex: "#b4a0ff" },
+            { name: "Outlook Sky", hex: "#00bcf2" },
+            { name: "Charcoal Slate", hex: "#4f4f4f" },
+            { name: "Burgundy Red", hex: "#750b1c" },
+            { name: "Muted Sage", hex: "#4b6566" },
+            { name: "Bookings Teal", hex: "#038387" },
+            { name: "Soft Mint", hex: "#10b981" },
+            { name: "Crimson Rose", hex: "#d32f2f" },
+            { name: "Pumpkin Hue", hex: "#f57c00" },
+            { name: "Leaf Emerald", hex: "#388e3c" },
+            { name: "Azure Breeze", hex: "#0288d1" }
+        ];
+
+        function getColorName(hex) {
+            const matched = M365_COLORS.find(c => c.hex.toLowerCase() === hex.toLowerCase());
+            return matched ? matched.name : hex;
+        }
+
+        function clearMultiviewAll() {
+            multiviewSelectedList = [];
+            const customInput = document.getElementById("multiview-filename-input");
+            if (customInput) customInput.value = "";
+            logDiagnostic("Cleared all sessions from Multiview.");
+            renderMultiviewSidebar();
+            renderMultiviewActiveList();
+            updateMultiviewChart();
+        }
+
+        function toggleMultiviewSession(id) {
+            const cleanId = id.toString().replace('session_', '');
+            const existsIndex = multiviewSelectedList.findIndex(item => {
+                const itemCleanId = item.id.toString().replace('session_', '');
+                return itemCleanId === cleanId;
+            });
+            if (existsIndex > -1) {
+                multiviewSelectedList.splice(existsIndex, 1);
+                logDiagnostic(`Removed session from Multiview.`);
+            } else {
+                const session = syncedSessions[`session_${cleanId}`] || syncedSessions[cleanId];
+                if (!session) {
+                    logDiagnostic(`Session with clean ID ${cleanId} not found in database.`);
+                    return;
+                }
+                const rawPoints = session.datapoints ? Object.values(session.datapoints) : [];
+                const sorted = rawPoints.sort((a,b) => a.timeMillis - b.timeMillis);
+                if (sorted.length === 0) {
+                    logDiagnostic("Cannot add empty session.");
+                    return;
+                }
+                
+                const baseTime = sorted[0].timeMillis;
+                const pointsMapped = sorted.map(p => ({
+                    t: parseFloat(((p.timeMillis - baseTime) / 1000.0).toFixed(3)),
+                    lux: p.lux
+                }));
+                
+                const usedColors = new Set(multiviewSelectedList.map(item => item.color));
+                let chosenColor = M365_COLORS[0].hex;
+                for (let col of M365_COLORS) {
+                    if (!usedColors.has(col.hex)) {
+                        chosenColor = col.hex;
+                        break;
+                    }
+                }
+                if (usedColors.has(chosenColor)) {
+                    chosenColor = M365_COLORS[multiviewSelectedList.length % M365_COLORS.length].hex;
+                }
+
+                multiviewSelectedList.push({
+                    id: cleanId,
+                    title: session.title,
+                    color: chosenColor,
+                    datapoints: pointsMapped,
+                    rawDatapoints: sorted
+                });
+                logDiagnostic(`Added session to Multiview: "${session.title}"`);
+            }
+            
+            renderMultiviewSidebar();
+            renderMultiviewActiveList();
+            updateMultiviewChart();
+        }
+
+        function addSelectedToMultiview() {
+            const ids = Array.from(selectedSessions);
+            if (ids.length === 0) return;
+
+            let addedCount = 0;
+            ids.forEach(id => {
+                const cleanId = id.toString().replace('session_', '');
+                
+                // Check if already in multiview
+                const exists = multiviewSelectedList.some(item => {
+                    const itemCleanId = item.id.toString().replace('session_', '');
+                    return itemCleanId === cleanId;
+                });
+                
+                if (!exists) {
+                    const session = syncedSessions[`session_${cleanId}`] || syncedSessions[cleanId];
+                    if (session) {
+                        const rawPoints = session.datapoints ? Object.values(session.datapoints) : [];
+                        const sorted = rawPoints.sort((a,b) => a.timeMillis - b.timeMillis);
+                        if (sorted.length > 0) {
+                            const baseTime = sorted[0].timeMillis;
+                            const pointsMapped = sorted.map(p => ({
+                                t: parseFloat(((p.timeMillis - baseTime) / 1000.0).toFixed(3)),
+                                lux: p.lux
+                            }));
+                            
+                            const usedColors = new Set(multiviewSelectedList.map(item => item.color));
+                            let chosenColor = M365_COLORS[0].hex;
+                            for (let col of M365_COLORS) {
+                                if (!usedColors.has(col.hex)) {
+                                    chosenColor = col.hex;
+                                    break;
+                                }
+                            }
+                            if (usedColors.has(chosenColor)) {
+                                chosenColor = M365_COLORS[multiviewSelectedList.length % M365_COLORS.length].hex;
+                            }
+
+                            multiviewSelectedList.push({
+                                id: cleanId,
+                                title: session.title,
+                                color: chosenColor,
+                                datapoints: pointsMapped,
+                                rawDatapoints: sorted
+                            });
+                            addedCount++;
+                        }
+                    }
+                }
+            });
+
+            if (addedCount > 0) {
+                logDiagnostic(`Added ${addedCount} selected session(s) to Multiview.`);
+            } else {
+                logDiagnostic("No new valid session(s) were added (they might already be in Multiview or are empty).");
+            }
+
+            renderMultiviewSidebar();
+            renderMultiviewActiveList();
+            updateMultiviewChart();
+
+            switchTab('multiview');
+        }
+
+        function renderMultiviewSidebar() {
+            const listContainer = document.getElementById("multiview-available-list");
+            if (!listContainer) return;
+            
+            const countBadge = document.getElementById("multiview-db-count");
+            const sessions = Object.values(syncedSessions);
+            if (countBadge) countBadge.innerText = `${sessions.length} records`;
+
+            if (sessions.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="text-center text-brand-subtle py-8 text-xs">
+                        <i class="fa-solid fa-cloud-arrow-down text-lg mb-1 opacity-60"></i>
+                        <p>No records synchronized</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const searchQuery = (document.getElementById("multiview-search-input")?.value || "").toLowerCase().trim();
+            const sorted = sessions.sort((a,b) => b.timestamp - a.timestamp);
+            
+            listContainer.innerHTML = "";
+            let matchCount = 0;
+
+            sorted.forEach(session => {
+                if (searchQuery && !session.title.toLowerCase().includes(searchQuery)) {
+                    return;
+                }
+                matchCount++;
+
+                const isAdded = multiviewSelectedList.some(item => {
+                    const itemCleanId = item.id.toString().replace('session_', '');
+                    const sessCleanId = session.id.toString().replace('session_', '');
+                    return itemCleanId === sessCleanId;
+                });
+                const dateStr = new Date(session.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                const durationSec = (session.durationMs / 1000.0).toFixed(1);
+                
+                const div = document.createElement("div");
+                div.className = `p-3 rounded-xl border border-gray-150 transition-all flex items-center justify-between cursor-pointer ${isAdded ? 'bg-brand-active border-emerald-300 shadow-xs' : 'bg-white hover:bg-slate-50'}`;
+                div.onclick = () => toggleMultiviewSession(session.id);
+
+                div.innerHTML = `
+                    <div class="flex-1 min-w-0 pr-2">
+                        <div class="text-xs font-semibold text-brand-dark break-words pr-1 leading-normal mb-1" title="${session.title}">${session.title}</div>
+                        <div class="flex items-center gap-2 text-[10px] text-brand-subtle">
+                            <span>${dateStr}</span>
+                            <span class="w-1.5 h-1.5 rounded-full bg-slate-200"></span>
+                            <span>${durationSec}s</span>
+                        </div>
+                    </div>
+                    <button class="shrink-0 text-xs px-2.5 py-1.5 rounded-lg border transition-all ${isAdded ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-brand-dark border-gray-200 hover:bg-gray-55'}">
+                        <i class="fa-solid ${isAdded ? 'fa-check' : 'fa-plus'}"></i>
+                    </button>
+                `;
+                listContainer.appendChild(div);
+            });
+
+            if (matchCount === 0) {
+                listContainer.innerHTML = `
+                    <div class="text-center text-brand-subtle py-8 text-xs">
+                        <i class="fa-solid fa-magnifying-glass text-lg mb-1 opacity-60"></i>
+                        <p>No matching recordings</p>
+                    </div>
+                `;
+            }
+        }
+
+        function renderMultiviewActiveList() {
+            const activeContainer = document.getElementById("multiview-active-list");
+            if (!activeContainer) return;
+
+            const activeCountBadge = document.getElementById("multiview-active-count");
+            if (activeCountBadge) activeCountBadge.innerText = `${multiviewSelectedList.length} active`;
+
+            const emptyState = document.getElementById("multiview-empty-state");
+            if (emptyState) {
+                if (multiviewSelectedList.length === 0) {
+                    emptyState.classList.remove("hidden");
+                } else {
+                    emptyState.classList.add("hidden");
+                }
+            }
+
+            if (multiviewSelectedList.length === 0) {
+                activeContainer.innerHTML = `
+                    <div class="text-center text-brand-subtle py-8 text-xs">
+                        <i class="fa-solid fa-sliders text-lg mb-1 opacity-60"></i>
+                        <p>No lines plotted</p>
+                        <p class="text-[10px] mt-1 text-slate-400">Select recordings on the left sidebar</p>
+                    </div>
+                `;
+                return;
+            }
+
+            activeContainer.innerHTML = "";
+
+            multiviewSelectedList.forEach((item, idx) => {
+                const div = document.createElement("div");
+                div.className = "p-3 bg-slate-50 border border-slate-100 hover:border-slate-300 rounded-xl flex flex-col gap-2 relative transition-all duration-150 cursor-grab active:cursor-grabbing";
+                div.draggable = true;
+
+                // Bind native HTML5 drag-and-drop events
+                div.addEventListener('dragstart', (e) => handleDragStart(e, idx));
+                div.addEventListener('dragover', (e) => handleDragOver(e, idx));
+                div.addEventListener('dragleave', (e) => handleDragLeave(e));
+                div.addEventListener('drop', (e) => handleDrop(e, idx));
+                div.addEventListener('dragend', (e) => handleDragEnd(e));
+
+                const isTopHalf = idx < (multiviewSelectedList.length / 2);
+                const positionClass = isTopHalf ? "top-full mt-1.5" : "bottom-full mb-1.5";
+                
+                div.innerHTML = `
+                    <div class="flex items-start justify-between gap-1" onclick="event.stopPropagation();">
+                        <span class="text-xs font-semibold text-brand-dark break-words pr-1 leading-normal" title="${item.title}">${item.title}</span>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <button onclick="renameSession('${item.id}'); event.stopPropagation();" class="text-gray-400 hover:text-emerald-600 transition-colors text-[10px] p-0.5" title="Rename recording">
+                                <i class="fa-solid fa-pen text-[9px]"></i>
+                            </button>
+                            <button onclick="removeSessionFromMultiview('${item.id}'); event.stopPropagation();" class="text-gray-400 hover:text-red-500 transition-colors text-[11px] p-0.5" title="Remove line">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center justify-between text-xs text-brand-subtle mt-1" onclick="event.stopPropagation();">
+                        <!-- Drag-and-drop indicator -->
+                        <div class="flex items-center gap-1.5 bg-white border border-slate-150 rounded-lg px-2 py-1 text-slate-400 text-xs select-none" title="Drag card to adjust order">
+                            <i class="fa-solid fa-grip-vertical text-slate-400 text-[10px]"></i>
+                            <span class="text-[10px] text-slate-500 font-medium">Drag to reorder</span>
+                        </div>
+                        
+                        <!-- Color button -->
+                        <div class="relative">
+                            <button onclick="toggleMultiviewColorDropdown('${item.id}', event);" class="flex items-center gap-1.5 bg-white border border-slate-200 hover:border-slate-300 rounded-lg px-2 py-1 text-[11px] font-normal transition-colors text-brand-dark">
+                                <span class="w-3 h-3 rounded-full border border-black/10 inline-block shrink-0" style="background-color: ${item.color}"></span>
+                                <span class="truncate max-w-[65px] text-[11px] font-medium text-brand-dark">${getColorName(item.color)}</span>
+                                <i class="fa-solid fa-chevron-down text-[9px] opacity-70"></i>
+                            </button>
+                            
+                            <!-- Absolute Color Selector Popover panel, hidden by default -->
+                            <div id="color-picker-${item.id}" class="absolute right-0 ${positionClass} z-[9999] hidden bg-white border border-slate-200 rounded-2xl shadow-xl p-3 w-56 grid grid-cols-5 gap-1.5">
+                                <!-- Swatches loaded dynamically below -->
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                activeContainer.appendChild(div);
+
+                const picker = document.getElementById(`color-picker-${item.id}`);
+                if (picker) {
+                    M365_COLORS.forEach(col => {
+                        const swatchBtn = document.createElement("button");
+                        swatchBtn.type = "button";
+                        swatchBtn.className = "w-7 h-7 rounded-lg border border-black/5 hover:scale-110 active:scale-95 transition-all text-center flex items-center justify-center shrink-0 shadow-xs relative group";
+                        swatchBtn.style.backgroundColor = col.hex;
+                        swatchBtn.title = col.name;
+                        swatchBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            selectMultiviewColor(item.id, col.hex);
+                        };
+                        
+                        if (col.hex.toLowerCase() === item.color.toLowerCase()) {
+                            swatchBtn.innerHTML = `<i class="fa-solid fa-check text-[10px] text-white" style="text-shadow: 1px 1px 2px rgba(0,0,0,0.6)"></i>`;
+                        }
+                        
+                        picker.appendChild(swatchBtn);
+                    });
+                }
+            });
+        }
+
+        let dragSourceIdx = null;
+
+        function handleDragStart(event, idx) {
+            dragSourceIdx = idx;
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', idx);
+            event.currentTarget.classList.add('opacity-40', 'border-emerald-500');
+        }
+
+        function handleDragOver(event, idx) {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+            const element = event.currentTarget;
+            element.classList.add('border-emerald-400', 'bg-emerald-50/10');
+        }
+
+        function handleDragLeave(event) {
+            const element = event.currentTarget;
+            element.classList.remove('border-emerald-400', 'bg-emerald-50/10');
+        }
+
+        function handleDrop(event, targetIdx) {
+            event.preventDefault();
+            const element = event.currentTarget;
+            element.classList.remove('border-emerald-400', 'bg-emerald-50/10');
+
+            if (dragSourceIdx !== null && dragSourceIdx !== targetIdx) {
+                const draggedItem = multiviewSelectedList[dragSourceIdx];
+                multiviewSelectedList.splice(dragSourceIdx, 1);
+                multiviewSelectedList.splice(targetIdx, 0, draggedItem);
+
+                renderMultiviewActiveList();
+                updateMultiviewChart();
+            }
+        }
+
+        function handleDragEnd(event) {
+            event.currentTarget.classList.remove('opacity-40', 'border-emerald-500');
+            dragSourceIdx = null;
+            renderMultiviewActiveList();
+        }
+
+        function removeSessionFromMultiview(id) {
+            const cleanId = id.toString().replace('session_', '');
+            const idx = multiviewSelectedList.findIndex(item => item.id.toString().replace('session_', '') === cleanId);
+            if (idx > -1) {
+                multiviewSelectedList.splice(idx, 1);
+                
+                renderMultiviewSidebar();
+                renderMultiviewActiveList();
+                updateMultiviewChart();
+            }
+        }
+
+        function selectMultiviewColor(id, hexColor) {
+            const cleanId = id.toString().replace('session_', '');
+            const item = multiviewSelectedList.find(item => item.id.toString().replace('session_', '') === cleanId);
+            if (item) {
+                item.color = hexColor;
+                
+                renderMultiviewActiveList();
+                updateMultiviewChart();
+            }
+        }
+
+        function toggleMultiviewColorDropdown(id, event) {
+            if (event) event.stopPropagation();
+            
+            document.querySelectorAll('[id^="color-picker-"]').forEach(p => {
+                if (p.id !== `color-picker-${id}`) {
+                    p.classList.add("hidden");
+                    p.closest('.bg-slate-50')?.classList.remove('z-50');
+                }
+            });
+
+            const picker = document.getElementById(`color-picker-${id}`);
+            if (picker) {
+                picker.classList.toggle("hidden");
+                const card = picker.closest('.bg-slate-50');
+                if (card) {
+                    if (picker.classList.contains("hidden")) {
+                        card.classList.remove("z-50");
+                    } else {
+                        card.classList.add("z-50");
+                    }
+                }
+            }
+        }
+
+        document.addEventListener('click', function(event) {
+            if (!event.target.closest('[id^="color-picker-"]') && !event.target.closest('button')) {
+                document.querySelectorAll('[id^="color-picker-"]').forEach(p => {
+                    p.classList.add("hidden");
+                    p.closest('.bg-slate-50')?.classList.remove('z-50');
+                });
+            }
+        });
+
+        function updateMultiviewChart() {
+            if (multiviewSelectedList.length === 0) {
+                if (multiviewChartInstance) {
+                    multiviewChartInstance.destroy();
+                    multiviewChartInstance = null;
+                }
+                return;
+            }
+
+            const ctx = document.getElementById("multiview-chart").getContext("2d");
+            
+            const datasets = multiviewSelectedList.map(item => {
+                const data = item.datapoints.map(p => ({
+                    x: p.t,
+                    y: p.lux
+                }));
+
+                return {
+                    label: item.title,
+                    data: data,
+                    borderColor: item.color,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2.5,
+                    pointRadius: 1.5,
+                    pointHoverRadius: 5,
+                    pointBackgroundColor: item.color,
+                    fill: false,
+                    tension: 0.1
+                };
+            });
+
+            if (!multiviewChartInstance) {
+                multiviewChartInstance = new Chart(ctx, {
+                    type: "line",
+                    data: {
+                        datasets: datasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        interaction: {
+                            intersect: false,
+                            mode: 'nearest',
+                            axis: 'x'
+                        },
+                        scales: {
+                            x: {
+                                type: "linear",
+                                ticks: { color: "#64748B" },
+                                title: {
+                                    display: true,
+                                    text: '時間 (s)',
+                                    color: "#64748B",
+                                    font: { size: 12, weight: 'medium' }
+                                }
+                            },
+                            y: {
+                                ticks: { color: "#64748B" },
+                                title: {
+                                    display: true,
+                                    text: '亮度 (Lv)',
+                                    color: "#64748B",
+                                    font: { size: 12, weight: 'medium' }
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top',
+                                labels: {
+                                    color: '#334155',
+                                    font: { size: 11, family: 'Instrument Sans' }
+                                }
+                            },
+                            tooltip: {
+                                enabled: true,
+                                backgroundColor: 'rgba(30, 41, 59, 0.95)',
+                                titleColor: '#ffffff',
+                                bodyColor: '#38bdf8',
+                                borderColor: '#334155',
+                                borderWidth: 1,
+                                padding: 10,
+                                displayColors: true,
+                                callbacks: {
+                                    title: function(context) {
+                                        return `Time: ${context[0].parsed.x.toFixed(2)}s`;
+                                    },
+                                    label: function(context) {
+                                        return ` ${context.dataset.label}: ${context.parsed.y.toFixed(3)} Lv`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                multiviewChartInstance.data.datasets = datasets;
+                multiviewChartInstance.update();
+            }
+        }
+
+        function exportMultiviewExcel() {
+            if (multiviewSelectedList.length === 0) {
+                logDiagnostic("Combined Excel export failed: No recordings selected.");
+                return;
+            }
+
+            logDiagnostic(`Compiling multi-dataset aligned Excel spreadsheet...`);
+            
+            let maxOverallT = 0;
+            multiviewSelectedList.forEach(item => {
+                if (item.datapoints.length > 0) {
+                    const lastT = item.datapoints[item.datapoints.length - 1].t;
+                    if (lastT > maxOverallT) maxOverallT = lastT;
+                }
+            });
+
+            if (maxOverallT <= 0) {
+                logDiagnostic("Combined Excel export failed: Records contain no data.");
+                return;
+            }
+
+            let step = 0.1;
+            if (maxOverallT > 600) {
+                step = 0.5;
+            }
+            if (maxOverallT > 3000) {
+                step = 1.0;
+            }
+
+            const excelRows = [];
+            const totalSteps = Math.ceil(maxOverallT / step);
+            
+            for (let i = 0; i <= totalSteps; i++) {
+                const currentT = parseFloat((i * step).toFixed(2));
+                const row = { "t": currentT };
+                
+                multiviewSelectedList.forEach(item => {
+                    row[item.title] = interpolateLuxAtT(item.datapoints, currentT);
+                });
+                
+                excelRows.push(row);
+            }
+
+            const ws = XLSX.utils.json_to_sheet(excelRows);
+            applyXlsxFormatting(ws);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Combined Telemetry Sync");
+
+            const stamp = new Date().toISOString().slice(0, 10);
+            const defaultName = `multiview_sync_${stamp}`;
+            const customInput = document.getElementById("multiview-filename-input");
+            let filename = defaultName;
+            if (customInput && customInput.value.trim().length > 0) {
+                filename = sanitizeFilename(customInput.value.trim());
+            }
+            XLSX.writeFile(wb, `${filename}.xlsx`);
+            logDiagnostic("Excel combined spreadsheet generated successfully.");
+        }
+
+        function interpolateLuxAtT(points, targetT) {
+            if (!points || points.length === 0) return null;
+            if (targetT <= points[0].t) return parseFloat(points[0].lux.toFixed(3));
+            if (targetT > points[points.length - 1].t) return 0;
+            if (targetT === points[points.length - 1].t) return parseFloat(points[points.length - 1].lux.toFixed(3));
+
+            for (let i = 0; i < points.length - 1; i++) {
+                const p1 = points[i];
+                const p2 = points[i + 1];
+                if (targetT >= p1.t && targetT <= p2.t) {
+                    if (p2.t === p1.t) return parseFloat(p1.lux.toFixed(3));
+                    const pct = (targetT - p1.t) / (p2.t - p1.t);
+                    return parseFloat((p1.lux + pct * (p2.lux - p1.lux)).toFixed(3));
+                }
+            }
+            return null;
+        }
+
+        function downloadMultiviewJpg() {
+            if (multiviewSelectedList.length === 0) {
+                logDiagnostic("No plotted data to save as JPG.");
+                return;
+            }
+
+            const canvas = document.getElementById("multiview-chart");
+            if (!canvas) return;
+
+            try {
+                const tempCanvas = document.createElement("canvas");
+                tempCanvas.width = canvas.width;
+                tempCanvas.height = canvas.height;
+                const tempCtx = tempCanvas.getContext("2d");
+                
+                tempCtx.fillStyle = "#FFFFFF";
+                tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+                tempCtx.drawImage(canvas, 0, 0);
+                
+                const dataUrl = tempCanvas.toDataURL("image/jpeg", 0.95);
+                const link = document.createElement("a");
+                link.download = `multiview_sync_plot_${Date.now()}.jpg`;
+                link.href = dataUrl;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                logDiagnostic("Multiview plot JPG downloaded.");
+            } catch (err) {
+                logDiagnostic(`JPG download failed: ${err.message}`);
+            }
+        }
+
+        window.onload = () => {
+            initPlotChart();
+            registerSocketListeners();
+            setupPullToRefresh();
+            requestScreenWakeLock();
+            initiateKeepScreenAwakeVideo();
+
+            // Custom dropdown toggle
+            const dropdownBtn = document.getElementById("naming-experiment-dropdown-custom");
+            const options = document.getElementById("dropdown-options");
+            if (dropdownBtn && options) {
+                dropdownBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    options.classList.toggle("hidden");
+                });
+                options.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                });
+                document.addEventListener("click", () => {
+                    options.classList.add("hidden");
+                });
+            }
+        };
+    </script>
+</body>
+</html>

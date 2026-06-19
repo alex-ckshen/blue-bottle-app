@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "363072938771",
+    "project_id": "blue-bottle-experiment",
+    "storage_bucket": "blue-bottle-experiment.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:363072938771:android:928264007d65ecb91a30e6",
+        "android_client_info": {
+          "package_name": "com.aistudio.bluebottle.v052501"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCqQXyYH7ge1VNkv_Rj5qoc2v1uYhMzo4Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
